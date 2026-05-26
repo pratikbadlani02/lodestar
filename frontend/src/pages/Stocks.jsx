@@ -301,9 +301,8 @@ export default function Stocks() {
   }, [symbol])
 
   const [snap, setSnap] = useState(null)
-  // Public viewer: no account, so no live position or order data per symbol.
-  const positions = []
-  const orders = []
+  const [positions, setPositions] = useState([])
+  const [orders, setOrders] = useState([])
   const [news, setNews] = useState([])
   const [newsLoading, setNewsLoading] = useState(false)
 
@@ -346,7 +345,15 @@ export default function Stocks() {
       .finally(() => setNewsLoading(false))
   }, [symbol])
 
-  const position = null  // not exposed publicly
+  // Account
+  useEffect(() => {
+    Promise.allSettled([api.getPositions(), api.listOrders(60)]).then(([pos, ord]) => {
+      if (pos.status === 'fulfilled') setPositions(pos.value || [])
+      if (ord.status === 'fulfilled') setOrders(ord.value || [])
+    })
+  }, [symbol])
+
+  const position = positions.find((p) => (p.symbol || '').toUpperCase() === symbol)
 
   return (
     <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
@@ -376,12 +383,18 @@ export default function Stocks() {
         {/* Right column */}
         <div className="lg:col-span-4 space-y-3">
           <QuotePanel snap={snap} />
+          <PositionCard position={position} symbol={symbol} />
         </div>
       </div>
 
-      {/* News */}
-      <div>
-        <NewsList articles={news} loading={newsLoading} symbol={symbol} />
+      {/* Lower row: news + orders */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <div className="lg:col-span-8">
+          <NewsList articles={news} loading={newsLoading} symbol={symbol} />
+        </div>
+        <div className="lg:col-span-4">
+          <OrdersForSymbol orders={orders} symbol={symbol} />
+        </div>
       </div>
     </div>
   )

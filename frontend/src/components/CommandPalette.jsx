@@ -11,8 +11,10 @@ import {
 } from 'lucide-react'
 import { useSymbol } from '../lib/SymbolContext'
 import { useTheme } from '../lib/ThemeContext'
+import { api } from '../lib/api'
+
 const ROUTES = [
-  { label: 'Market',          path: '/',              icon: LayoutGrid, kw: 'home overview' },
+  { label: 'Workspace',       path: '/',              icon: LayoutGrid, kw: 'home dashboard' },
   { label: 'Stocks',          path: '/stocks',        icon: TrendingUp, kw: 'quote chart' },
   { label: 'Analysis',        path: '/analysis',      icon: Gauge,      kw: 'score factor' },
   { label: 'Options Chain',   path: '/options',       icon: Layers,     kw: 'call put' },
@@ -25,7 +27,21 @@ const ROUTES = [
   { label: 'Movers',          path: '/movers',        icon: Activity,   kw: 'gainers losers' },
   { label: 'Time & Sales',    path: '/tape',          icon: Radio,      kw: 'prints tape level' },
   { label: 'Crypto',          path: '/crypto',        icon: Bitcoin,    kw: 'btc eth' },
+  { label: 'Trade',           path: '/trade',         icon: Zap,        kw: 'live order' },
+  { label: 'Paper Trade',     path: '/paper',         icon: FlaskConical, kw: 'sim paper' },
+  { label: 'Watchlists',      path: '/watchlists',    icon: Star,       kw: 'lists' },
   { label: 'Screener',        path: '/screener',      icon: Filter,     kw: 'screen filter' },
+  { label: 'Market News',     path: '/market',        icon: Newspaper,  kw: 'headlines' },
+  { label: 'Strategies',      path: '/strategies',    icon: Bot,        kw: 'algo signal' },
+  { label: 'Backtests',       path: '/backtests',     icon: BarChart3,  kw: 'backtest history' },
+  { label: 'Optimizer',       path: '/optimizer',     icon: Sparkles,   kw: 'tune grid search' },
+  { label: 'Orders',          path: '/orders',        icon: ListOrdered, kw: 'fills cancel' },
+  { label: 'Positions',       path: '/positions',     icon: Briefcase,  kw: 'holdings pnl' },
+  { label: 'Risk Analytics',  path: '/risk',          icon: Shield,     kw: 'drawdown var' },
+  { label: 'Alerts',          path: '/alerts',        icon: Bell,       kw: 'notification' },
+  { label: 'Price Alerts',    path: '/price-alerts',  icon: Bell,       kw: 'threshold' },
+  { label: 'Audit Log',       path: '/audit',         icon: ShieldAlert, kw: 'history activity' },
+  { label: 'Settings',        path: '/settings',      icon: Settings,   kw: 'config preferences' },
 ]
 
 function fuzzy(needle, hay) {
@@ -115,8 +131,11 @@ export default function CommandPalette() {
 
     // Actions section
     const actionList = [
+      { id: 'buy',  label: `Buy ${symbol}`,  icon: TrendingUp },
+      { id: 'sell', label: `Sell ${symbol}`, icon: TrendingUp },
       { id: 'theme', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
         icon: theme === 'dark' ? Sun : Moon },
+      { id: 'logout', label: 'Log out', icon: LogOut },
     ]
     const actionMatches = actionList
       .map((a) => ({ a, score: q ? fuzzy(q, a.label) : 1 }))
@@ -142,7 +161,10 @@ export default function CommandPalette() {
     } else if (item.kind === 'page') {
       navigate(item.value)
     } else if (item.kind === 'action') {
-      if (item.value === 'theme') toggleTheme()
+      if (item.value === 'buy')    window.dispatchEvent(new CustomEvent('order-ticket:open', { detail: { side: 'buy' } }))
+      else if (item.value === 'sell') window.dispatchEvent(new CustomEvent('order-ticket:open', { detail: { side: 'sell' } }))
+      else if (item.value === 'theme') toggleTheme()
+      else if (item.value === 'logout') { api.logout(); navigate('/login') }
     }
   }
 

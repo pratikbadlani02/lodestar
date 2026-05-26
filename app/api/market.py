@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.models import OHLCV
+from app.core.security import get_current_user
 from app.services import fundamentals as fund
 from app.services import stock_analysis as analysis
 from app.services.broker import AlpacaError, get_broker
@@ -22,6 +23,7 @@ async def get_ohlcv(
     timeframe: str = "1d",
     days: int = Query(default=365, ge=1, le=3650),
     db: AsyncSession = Depends(get_db),
+    user: str = Depends(get_current_user),
 ) -> dict:
     start = datetime.now(timezone.utc) - timedelta(days=days)
     df = await get_bars_df(db, symbol=symbol, timeframe=timeframe, start=start)
@@ -46,6 +48,7 @@ async def trigger_fetch(
     timeframe: str = "1Day",
     lookback_days: int = 365,
     db: AsyncSession = Depends(get_db),
+    user: str = Depends(get_current_user),
 ) -> dict:
     """Force-refresh OHLCV from broker."""
     count = await fetch_and_store_bars(db, symbol=symbol, timeframe=timeframe, lookback_days=lookback_days)
@@ -56,6 +59,7 @@ async def trigger_fetch(
 async def get_news(
     symbols: str | None = Query(default=None, description="Comma-separated symbols, e.g. AAPL,TSLA"),
     limit: int = Query(default=20, ge=1, le=50),
+    user: str = Depends(get_current_user),
 ) -> dict:
     """Fetch latest news articles from Alpaca (Webull-style news feed)."""
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else None
@@ -90,6 +94,7 @@ async def screener(
     min_change_pct: float = Query(default=-100, description="Min % change from open"),
     max_change_pct: float = Query(default=100),
     db: AsyncSession = Depends(get_db),
+    user: str = Depends(get_current_user),
 ) -> dict:
     """
     Screen stocks using most-recent OHLCV bars stored locally.
@@ -141,6 +146,7 @@ async def screener(
 @router.get("/snapshots")
 async def get_snapshots(
     symbols: str = Query(..., description="Comma-separated symbols, e.g. AAPL,TSLA"),
+    user: str = Depends(get_current_user),
 ) -> dict:
     """Fetch real-time quote snapshots for given symbols."""
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
@@ -156,7 +162,7 @@ async def get_snapshots(
 
 # ── Profile / fundamentals (yfinance) ─────────────────────────────
 @router.get("/profile/{symbol}")
-async def get_profile(symbol: str) -> dict:
+async def get_profile(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_profile(symbol)
 
 
@@ -164,6 +170,7 @@ async def get_profile(symbol: str) -> dict:
 async def get_fundamentals(
     symbol: str,
     period: str = Query(default="annual", pattern="^(annual|quarterly)$"),
+    user: str = Depends(get_current_user),
 ) -> dict:
     return await fund.get_fundamentals(symbol, period=period)
 
@@ -172,6 +179,7 @@ async def get_fundamentals(
 @router.get("/options/{symbol}/expirations")
 async def get_option_expirations(
     symbol: str,
+    user: str = Depends(get_current_user),
 ) -> dict:
     expiries = await fund.get_option_expirations(symbol)
     return {"symbol": symbol.upper(), "expirations": expiries}
@@ -181,6 +189,7 @@ async def get_option_expirations(
 async def get_option_chain(
     symbol: str,
     expiry: str | None = Query(default=None, description="YYYY-MM-DD; defaults to nearest"),
+    user: str = Depends(get_current_user),
 ) -> dict:
     if expiry is None:
         expiries = await fund.get_option_expirations(symbol)
@@ -195,6 +204,7 @@ async def get_option_chain(
 @router.get("/earnings/calendar")
 async def get_earnings_calendar(
     symbols: str = Query(..., description="Comma-separated symbols"),
+    user: str = Depends(get_current_user),
 ) -> dict:
     sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
     if not sym_list:
@@ -204,38 +214,38 @@ async def get_earnings_calendar(
 
 
 @router.get("/earnings/{symbol}")
-async def get_earnings(symbol: str) -> dict:
+async def get_earnings(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_earnings_history(symbol)
 
 
 # ── Analyst data + holders ────────────────────────────────────────
 @router.get("/analysts/{symbol}")
-async def get_analysts(symbol: str) -> dict:
+async def get_analysts(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_analyst_data(symbol)
 
 
 @router.get("/holders/{symbol}")
-async def get_holders(symbol: str) -> dict:
+async def get_holders(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_holders(symbol)
 
 
 @router.get("/dividends/{symbol}")
-async def get_dividends(symbol: str) -> dict:
+async def get_dividends(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_dividends(symbol)
 
 
 @router.get("/splits/{symbol}")
-async def get_splits(symbol: str) -> dict:
+async def get_splits(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_splits(symbol)
 
 
 @router.get("/sustainability/{symbol}")
-async def get_sustainability(symbol: str) -> dict:
+async def get_sustainability(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_sustainability(symbol)
 
 
 @router.get("/recommendation-trend/{symbol}")
-async def get_recommendation_trend(symbol: str) -> dict:
+async def get_recommendation_trend(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_recommendation_trend(symbol)
 
 
@@ -244,6 +254,7 @@ async def get_recommendation_trend(symbol: str) -> dict:
 async def get_trades(
     symbol: str,
     limit: int = Query(default=200, ge=1, le=10_000),
+    user: str = Depends(get_current_user),
 ) -> dict:
     broker = get_broker()
     try:
@@ -257,6 +268,7 @@ async def get_trades(
 async def get_quotes(
     symbol: str,
     limit: int = Query(default=200, ge=1, le=10_000),
+    user: str = Depends(get_current_user),
 ) -> dict:
     broker = get_broker()
     try:
@@ -270,6 +282,7 @@ async def get_quotes(
 @router.get("/movers")
 async def get_movers(
     top: int = Query(default=25, ge=1, le=100),
+    user: str = Depends(get_current_user),
 ) -> dict:
     broker = get_broker()
     try:
@@ -282,6 +295,7 @@ async def get_movers(
 async def get_most_actives(
     top: int = Query(default=25, ge=1, le=100),
     by: str = Query(default="volume", pattern="^(volume|trades)$"),
+    user: str = Depends(get_current_user),
 ) -> dict:
     broker = get_broker()
     try:
@@ -294,6 +308,7 @@ async def get_most_actives(
 @router.get("/crypto/snapshots")
 async def get_crypto_snapshots(
     symbols: str = Query(..., description="Comma-separated, e.g. BTC/USD,ETH/USD"),
+    user: str = Depends(get_current_user),
 ) -> dict:
     sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
     if not sym_list:
@@ -310,6 +325,7 @@ async def get_crypto_bars(
     symbol: str,
     timeframe: str = "1Day",
     days: int = Query(default=180, ge=1, le=3650),
+    user: str = Depends(get_current_user),
 ) -> dict:
     broker = get_broker()
     start = datetime.now(timezone.utc) - timedelta(days=days)
@@ -350,6 +366,7 @@ def _score_headline(text: str) -> int:
 async def get_analysis(
     symbol: str,
     include_news: bool = Query(default=True),
+    user: str = Depends(get_current_user),
 ) -> dict:
     """Aggregate stock analysis: returns, technicals, risk, factor score, seasonality."""
     payload = await analysis.get_full_analysis(symbol)
@@ -373,12 +390,12 @@ async def get_analysis(
 
 
 @router.get("/earnings-surprise/{symbol}")
-async def get_earnings_surprise(symbol: str) -> dict:
+async def get_earnings_surprise(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_earnings_surprise(symbol)
 
 
 @router.get("/short-interest/{symbol}")
-async def get_short_interest(symbol: str) -> dict:
+async def get_short_interest(symbol: str, user: str = Depends(get_current_user)) -> dict:
     return await fund.get_short_interest(symbol)
 
 
@@ -386,6 +403,7 @@ async def get_short_interest(symbol: str) -> dict:
 async def get_news_sentiment(
     symbol: str,
     limit: int = Query(default=30, ge=1, le=50),
+    user: str = Depends(get_current_user),
 ) -> dict:
     broker = get_broker()
     try:

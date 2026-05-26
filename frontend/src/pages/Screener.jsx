@@ -130,8 +130,12 @@ export default function Screener() {
   const [sortField, setSortField] = useState('change_pct')
   const [sortDir, setSortDir]     = useState('desc')
 
+  const [watchlists, setWatchlists] = useState([])
   const [presets, setPresets] = useState(() => loadPresets())
   const [presetName, setPresetName] = useState('')
+
+  // Load watchlists once
+  useEffect(() => { api.listWatchlists().then(setWatchlists).catch(() => {}) }, [])
 
   // Auto-run on mount
   useEffect(() => { runScreener() }, [])
@@ -223,6 +227,25 @@ export default function Screener() {
     return Object.entries(filters).filter(([_, v]) => v !== '' && v != null)
   }, [filters])
 
+  async function addToWatchlist(symbol) {
+    if (!watchlists.length) {
+      toast.warn('No watchlists yet', { description: 'Create one from the Watchlists page first.' })
+      return
+    }
+    const wl = watchlists[0]
+    const existing = wl.symbols || []
+    if (existing.includes(symbol)) {
+      toast.info(`${symbol} already in "${wl.name}"`)
+      return
+    }
+    try {
+      const updated = await api.updateWatchlist(wl.id, { name: wl.name, symbols: [...existing, symbol] })
+      setWatchlists((ws) => ws.map((w) => w.id === wl.id ? updated : w))
+      toast.success(`Added ${symbol} to "${wl.name}"`)
+    } catch (e) {
+      toast.apiError(e, `Failed to add ${symbol}`)
+    }
+  }
 
   return (
     <PageShell>
@@ -409,6 +432,7 @@ export default function Screener() {
                           </span>
                         </th>
                       ))}
+                      <th className="text-right w-16">Watch</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -439,6 +463,15 @@ export default function Screener() {
                         <td className="text-right font-mono tabular text-ink-3">{fmtPrice(r.high)}</td>
                         <td className="text-right font-mono tabular text-ink-3">{fmtPrice(r.low)}</td>
                         <td className="text-right text-2xs font-mono text-ink-4">{fmtAgo(r.as_of)}</td>
+                        <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => addToWatchlist(r.symbol)}
+                            title={watchlists[0] ? `Add to ${watchlists[0].name}` : 'No watchlist'}
+                            className="text-ink-5 hover:text-warn transition p-1"
+                          >
+                            <Star size={13} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -451,7 +484,7 @@ export default function Screener() {
           {hasRun && !loading && sortedResults.length > 0 && (
             <div className="flex items-center justify-between text-2xs text-ink-5 px-1">
               <span>{sortedResults.length} of {count} · sorted by <span className="font-mono text-ink-3">{sortField}</span> ({sortDir})</span>
-              <span>Click row → analysis · Right-click → context menu</span>
+              <span>Click row → analysis · Right-click → context menu · ★ to watchlist</span>
             </div>
           )}
         </div>

@@ -19,12 +19,6 @@ redis>=5.0.0
 # ── In-process scheduler (replaces Celery beat + worker) ──
 apscheduler>=3.10.4
 
-# ── Login rate limiting ───────────────────────────────
-slowapi>=0.1.9
-
-# ── Error tracking (optional, no-op when SENTRY_DSN unset) ──
-sentry-sdk[fastapi]>=2.0.0
-
 # ── Data / Numerics ───────────────────────────────────
 pandas>=2.2.0
 numpy>=1.26.0
