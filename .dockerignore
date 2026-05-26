@@ -1,0 +1,50 @@
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+venv
+.venv
+env
+.env
+.env.*
+!.env.example
+
+# Node
+frontend/node_modules
+frontend/dist
+node_modules
+
+# Build / runtime artifacts
+logs
+*.log
+celerybeat-schedule*
+celerybeat.pid
+*.sqlite
+*.db
+
+# Local-only tooling
+launchd
+nginx
+fix_*.sh
+setup_mac.sh
+manage.sh
+
+# Docs / tests
+docs
+tests
+
+# IDE
+*.swp

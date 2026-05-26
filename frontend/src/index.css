@@ -1,0 +1,238 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dark theme (default) — trader-focused ─────────────────── */
+:root,
+[data-theme="dark"] {
+  /* Semantic — clean, professional, less neon */
+  --c-up: 38 194 129;        /* emerald, slightly muted */
+  --c-up-soft: 22 163 113;
+  --c-down: 235 80 96;       /* red, slightly muted */
+  --c-down-soft: 211 60 76;
+  --c-warn: 245 158 11;
+  --c-warn-soft: 217 119 6;
+  --c-info: 56 189 248;
+  --c-info-soft: 2 132 199;
+
+  /* Single cyan accent — used for interactive states only */
+  --c-accent: 34 211 238;
+  --c-accent-soft: 6 182 212;
+  --c-accent2: 38 194 129;   /* secondary = same emerald as up */
+  --c-accent2-soft: 22 163 113;
+
+  /* Brand gradient now uses ONE flat green→cyan ramp — trader feel */
+  --c-grad-a: 38 194 129;
+  --c-grad-b: 22 163 113;
+  --c-grad-c: 34 211 238;
+
+  /* Surface — cooler near-black navy, slightly more density */
+  --c-surf-0: 8 10 16;       /* app bg, near-black */
+  --c-surf-1: 14 17 24;      /* panel */
+  --c-surf-2: 20 24 33;      /* raised */
+  --c-surf-3: 29 34 44;      /* hover */
+  --c-surf-4: 42 49 62;
+  --c-surf-5: 60 70 86;
+
+  --c-ink-1: 232 240 252;
+  --c-ink-2: 186 198 215;
+  --c-ink-3: 136 150 172;
+  --c-ink-4: 96 110 130;
+  --c-ink-5: 65 76 92;
+
+  --c-overlay: 255 255 255;
+
+  /* Subtle ambient wash — barely-there cyan/emerald */
+  --app-bg-a: rgba(34, 211, 238, 0.03);
+  --app-bg-b: rgba(38, 194, 129, 0.025);
+
+  --c-border-rgb: 136 150 172;
+  --c-border-alpha: 0.10;
+  --c-glass-bg: rgba(14, 17, 24, 0.78);
+
+  /* Row density — set per-table via data-density */
+  --row-py: 6px;
+  --row-px: 12px;
+}
+
+/* ── Light theme ──────────────────────────────────────────── */
+[data-theme="light"] {
+  --c-up: 22 163 113;
+  --c-up-soft: 21 128 92;
+  --c-down: 211 60 76;
+  --c-down-soft: 185 50 65;
+  --c-warn: 217 119 6;
+  --c-warn-soft: 180 83 9;
+  --c-info: 2 132 199;
+  --c-info-soft: 3 105 161;
+
+  --c-accent: 8 145 178;
+  --c-accent-soft: 14 116 144;
+  --c-accent2: 22 163 113;
+  --c-accent2-soft: 21 128 92;
+
+  --c-grad-a: 22 163 113;
+  --c-grad-b: 21 128 92;
+  --c-grad-c: 8 145 178;
+
+  --c-surf-0: 245 247 250;
+  --c-surf-1: 255 255 255;
+  --c-surf-2: 241 244 248;
+  --c-surf-3: 226 232 240;
+  --c-surf-4: 203 213 225;
+  --c-surf-5: 148 163 184;
+
+  --c-ink-1: 15 23 42;
+  --c-ink-2: 51 65 85;
+  --c-ink-3: 71 85 105;
+  --c-ink-4: 100 116 139;
+  --c-ink-5: 148 163 184;
+
+  --c-overlay: 15 23 42;
+
+  --app-bg-a: rgba(8, 145, 178, 0.03);
+  --app-bg-b: rgba(22, 163, 113, 0.025);
+
+  --c-border-rgb: 15 23 42;
+  --c-border-alpha: 0.10;
+  --c-glass-bg: rgba(255, 255, 255, 0.82);
+}
+
+/* ── Density modes (applied at <html> or any subtree) ──────── */
+[data-density="compact"] {
+  --row-py: 3px;
+  --row-px: 8px;
+}
+[data-density="comfortable"] {
+  --row-py: 10px;
+  --row-px: 14px;
+}
+
+html, body {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  font-size: 14px;
+  color: rgb(var(--c-ink-1));
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+body {
+  min-height: 100vh;
+  background: rgb(var(--c-surf-0));
+  background-image:
+    radial-gradient(circle at 20% -10%, var(--app-bg-a), transparent 50%),
+    radial-gradient(circle at 80% 110%, var(--app-bg-b), transparent 50%);
+  background-attachment: fixed;
+}
+
+.font-mono,
+table,
+input[type="number"],
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar — slimmer, accent-tinted on hover */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--c-ink-3) / 0.30); border-radius: 999px;
+  border: 2px solid transparent; background-clip: padding-box;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--c-accent) / 0.50); background-clip: padding-box; border: 2px solid transparent;
+}
+
+/* Semantic color helpers */
+.num-up   { color: rgb(var(--c-up)); }
+.num-down { color: rgb(var(--c-down)); }
+.num-flat { color: rgb(var(--c-ink-3)); }
+.bg-num-up   { background-color: rgba(var(--c-up) / 0.08); }
+.bg-num-down { background-color: rgba(var(--c-down) / 0.08); }
+
+.text-brand {
+  background: linear-gradient(135deg, rgb(var(--c-grad-a)) 0%, rgb(var(--c-grad-b)) 50%, rgb(var(--c-grad-c)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Card preset — subtle gradient, soft border, inner highlight */
+.card-surface {
+  background-color: rgb(var(--c-surf-1));
+  background-image: linear-gradient(180deg, rgba(var(--c-overlay) / 0.025) 0%, rgba(var(--c-overlay) / 0) 100%);
+  border: 1px solid rgba(var(--c-border-rgb) / var(--c-border-alpha));
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 0 rgba(var(--c-overlay) / 0.04) inset,
+    0 4px 24px -8px rgba(0,0,0,0.18);
+}
+[data-theme="light"] .card-surface {
+  box-shadow:
+    0 1px 0 0 rgba(255,255,255,0.6) inset,
+    0 4px 14px -8px rgba(15,23,42,0.10);
+}
+.card-surface-hover:hover {
+  border-color: rgba(var(--c-border-rgb) / calc(var(--c-border-alpha) * 1.8));
+}
+
+/* Dense table — now density-driven */
+table.t-dense th {
+  font-weight: 500; font-size: 0.6875rem; letter-spacing: 0.05em;
+  text-transform: uppercase; color: rgb(var(--c-ink-4));
+  padding-top: 8px; padding-bottom: 8px;
+}
+table.t-dense td,
+table.t-dense th {
+  padding-left: var(--row-px);
+  padding-right: var(--row-px);
+}
+table.t-dense td {
+  padding-top: var(--row-py);
+  padding-bottom: var(--row-py);
+}
+table.t-dense tbody tr {
+  border-top: 1px solid rgba(var(--c-border-rgb) / var(--c-border-alpha));
+  transition: background-color 0.12s;
+}
+table.t-dense tbody tr:hover { background-color: rgba(var(--c-accent) / 0.04); }
+table.t-dense tbody tr[aria-selected="true"] {
+  background-color: rgba(var(--c-accent) / 0.10);
+  box-shadow: inset 2px 0 0 0 rgb(var(--c-accent));
+}
+table.t-dense thead { position: sticky; top: 0; z-index: 5; }
+table.t-dense thead th {
+  background-color: rgb(var(--c-surf-1));
+  backdrop-filter: blur(8px);
+}
+
+/* Glass surface for top bar */
+.glass {
+  background: var(--c-glass-bg);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border-bottom: 1px solid rgba(var(--c-border-rgb) / var(--c-border-alpha));
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+@keyframes flash-up { 0% { background-color: rgba(var(--c-up) / 0.40); } 100% { background-color: transparent; } }
+@keyframes flash-down { 0% { background-color: rgba(var(--c-down) / 0.40); } 100% { background-color: transparent; } }
+.flash-up   { animation: flash-up 0.9s ease-out; }
+.flash-down { animation: flash-down 0.9s ease-out; }
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.soft-pulse { animation: soft-pulse 2.4s ease-in-out infinite; }
+
+*:focus-visible {
+  outline: 2px solid rgba(var(--c-accent) / 0.45);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+::selection { background: rgba(var(--c-accent) / 0.35); color: #fff; }

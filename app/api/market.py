@@ -1,0 +1,447 @@
+"""Market data routes — OHLCV, news, screener, options, fundamentals, earnings."""
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.core.models import OHLCV
+from app.core.security import get_current_user
+from app.services import fundamentals as fund
+from app.services import stock_analysis as analysis
+from app.services.broker import AlpacaError, get_broker
+from app.services.market_data import fetch_and_store_bars, get_bars_df
+
+router = APIRouter(prefix="/market", tags=["Market Data"])
+
+
+@router.get("/ohlcv/{symbol}")
+async def get_ohlcv(
+    symbol: str,
+    timeframe: str = "1d",
+    days: int = Query(default=365, ge=1, le=3650),
+    db: AsyncSession = Depends(get_db),
+    user: str = Depends(get_current_user),
+) -> dict:
+    start = datetime.now(timezone.utc) - timedelta(days=days)
+    df = await get_bars_df(db, symbol=symbol, timeframe=timeframe, start=start)
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": timeframe,
+        "bars_count": len(df),
+        "bars": [
+            {
+                "t": row["time"].isoformat() if hasattr(row["time"], "isoformat") else str(row["time"]),
+                "o": row["open"], "h": row["high"], "l": row["low"],
+                "c": row["close"], "v": row["volume"],
+            }
+            for _, row in df.iterrows()
+        ],
+    }
+
+
+@router.post("/fetch/{symbol}")
+async def trigger_fetch(
+    symbol: str,
+    timeframe: str = "1Day",
+    lookback_days: int = 365,
+    db: AsyncSession = Depends(get_db),
+    user: str = Depends(get_current_user),
+) -> dict:
+    """Force-refresh OHLCV from broker."""
+    count = await fetch_and_store_bars(db, symbol=symbol, timeframe=timeframe, lookback_days=lookback_days)
+    return {"symbol": symbol.upper(), "bars_stored": count}
+
+
+@router.get("/news")
+async def get_news(
+    symbols: str | None = Query(default=None, description="Comma-separated symbols, e.g. AAPL,TSLA"),
+    limit: int = Query(default=20, ge=1, le=50),
+    user: str = Depends(get_current_user),
+) -> dict:
+    """Fetch latest news articles from Alpaca (Webull-style news feed)."""
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else None
+    broker = get_broker()
+    try:
+        articles = await broker.get_news(symbols=sym_list, limit=limit)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    return {
+        "count": len(articles),
+        "articles": [
+            {
+                "id": a.get("id"),
+                "headline": a.get("headline"),
+                "summary": a.get("summary"),
+                "author": a.get("author"),
+                "source": a.get("source"),
+                "url": a.get("url"),
+                "symbols": a.get("symbols", []),
+                "published_at": a.get("created_at"),
+            }
+            for a in articles
+        ],
+    }
+
+
+@router.get("/screener")
+async def screener(
+    min_volume: float = Query(default=0, ge=0, description="Min daily volume"),
+    min_price: float = Query(default=0, ge=0),
+    max_price: float = Query(default=1_000_000, ge=0),
+    min_change_pct: float = Query(default=-100, description="Min % change from open"),
+    max_change_pct: float = Query(default=100),
+    db: AsyncSession = Depends(get_db),
+    user: str = Depends(get_current_user),
+) -> dict:
+    """
+    Screen stocks using most-recent OHLCV bars stored locally.
+    Returns symbols matching volume and price-change filters.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+    result = await db.execute(
+        select(OHLCV)
+        .where(OHLCV.timeframe == "1d", OHLCV.time >= cutoff)
+        .order_by(OHLCV.symbol, OHLCV.time.desc())
+    )
+    rows = result.scalars().all()
+
+    # Keep only the most recent bar per symbol
+    seen: set[str] = set()
+    latest: list[OHLCV] = []
+    for row in rows:
+        if row.symbol not in seen:
+            seen.add(row.symbol)
+            latest.append(row)
+
+    matches = []
+    for bar in latest:
+        price = float(bar.close)
+        volume = float(bar.volume)
+        open_price = float(bar.open)
+        change_pct = (price - open_price) / open_price * 100 if open_price else 0
+
+        if (
+            min_price <= price <= max_price
+            and volume >= min_volume
+            and min_change_pct <= change_pct <= max_change_pct
+        ):
+            matches.append({
+                "symbol": bar.symbol,
+                "price": price,
+                "open": open_price,
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "volume": volume,
+                "change_pct": round(change_pct, 2),
+                "as_of": bar.time.isoformat(),
+            })
+
+    matches.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+    return {"count": len(matches), "results": matches}
+
+
+@router.get("/snapshots")
+async def get_snapshots(
+    symbols: str = Query(..., description="Comma-separated symbols, e.g. AAPL,TSLA"),
+    user: str = Depends(get_current_user),
+) -> dict:
+    """Fetch real-time quote snapshots for given symbols."""
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+    broker = get_broker()
+    try:
+        data = await broker.get_snapshots(sym_list)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    return {"snapshots": data}
+
+
+# ── Profile / fundamentals (yfinance) ─────────────────────────────
+@router.get("/profile/{symbol}")
+async def get_profile(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_profile(symbol)
+
+
+@router.get("/fundamentals/{symbol}")
+async def get_fundamentals(
+    symbol: str,
+    period: str = Query(default="annual", pattern="^(annual|quarterly)$"),
+    user: str = Depends(get_current_user),
+) -> dict:
+    return await fund.get_fundamentals(symbol, period=period)
+
+
+# ── Options chain ─────────────────────────────────────────────────
+@router.get("/options/{symbol}/expirations")
+async def get_option_expirations(
+    symbol: str,
+    user: str = Depends(get_current_user),
+) -> dict:
+    expiries = await fund.get_option_expirations(symbol)
+    return {"symbol": symbol.upper(), "expirations": expiries}
+
+
+@router.get("/options/{symbol}")
+async def get_option_chain(
+    symbol: str,
+    expiry: str | None = Query(default=None, description="YYYY-MM-DD; defaults to nearest"),
+    user: str = Depends(get_current_user),
+) -> dict:
+    if expiry is None:
+        expiries = await fund.get_option_expirations(symbol)
+        if not expiries:
+            raise HTTPException(status_code=404, detail=f"No options listed for {symbol.upper()}")
+        expiry = expiries[0]
+    return await fund.get_option_chain(symbol, expiry)
+
+
+# ── Earnings ──────────────────────────────────────────────────────
+# NOTE: /earnings/calendar must precede /earnings/{symbol} so the literal route wins.
+@router.get("/earnings/calendar")
+async def get_earnings_calendar(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    user: str = Depends(get_current_user),
+) -> dict:
+    sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+    rows = await fund.get_earnings_calendar(sym_list)
+    return {"count": len(rows), "results": rows}
+
+
+@router.get("/earnings/{symbol}")
+async def get_earnings(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_earnings_history(symbol)
+
+
+# ── Analyst data + holders ────────────────────────────────────────
+@router.get("/analysts/{symbol}")
+async def get_analysts(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_analyst_data(symbol)
+
+
+@router.get("/holders/{symbol}")
+async def get_holders(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_holders(symbol)
+
+
+@router.get("/dividends/{symbol}")
+async def get_dividends(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_dividends(symbol)
+
+
+@router.get("/splits/{symbol}")
+async def get_splits(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_splits(symbol)
+
+
+@router.get("/sustainability/{symbol}")
+async def get_sustainability(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_sustainability(symbol)
+
+
+@router.get("/recommendation-trend/{symbol}")
+async def get_recommendation_trend(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_recommendation_trend(symbol)
+
+
+# ── Tape / quotes (intraday) ──────────────────────────────────────
+@router.get("/trades/{symbol}")
+async def get_trades(
+    symbol: str,
+    limit: int = Query(default=200, ge=1, le=10_000),
+    user: str = Depends(get_current_user),
+) -> dict:
+    broker = get_broker()
+    try:
+        trades = await broker.get_trades(symbol, limit=limit)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    return {"symbol": symbol.upper(), "count": len(trades), "trades": trades}
+
+
+@router.get("/quotes/{symbol}")
+async def get_quotes(
+    symbol: str,
+    limit: int = Query(default=200, ge=1, le=10_000),
+    user: str = Depends(get_current_user),
+) -> dict:
+    broker = get_broker()
+    try:
+        quotes = await broker.get_quotes(symbol, limit=limit)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    return {"symbol": symbol.upper(), "count": len(quotes), "quotes": quotes}
+
+
+# ── Movers / most-actives ─────────────────────────────────────────
+@router.get("/movers")
+async def get_movers(
+    top: int = Query(default=25, ge=1, le=100),
+    user: str = Depends(get_current_user),
+) -> dict:
+    broker = get_broker()
+    try:
+        return await broker.get_movers(top=top)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+
+
+@router.get("/most-actives")
+async def get_most_actives(
+    top: int = Query(default=25, ge=1, le=100),
+    by: str = Query(default="volume", pattern="^(volume|trades)$"),
+    user: str = Depends(get_current_user),
+) -> dict:
+    broker = get_broker()
+    try:
+        return await broker.get_most_actives(top=top, by=by)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+
+
+# ── Crypto ────────────────────────────────────────────────────────
+@router.get("/crypto/snapshots")
+async def get_crypto_snapshots(
+    symbols: str = Query(..., description="Comma-separated, e.g. BTC/USD,ETH/USD"),
+    user: str = Depends(get_current_user),
+) -> dict:
+    sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+    broker = get_broker()
+    try:
+        return {"snapshots": await broker.get_crypto_snapshots(sym_list)}
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+
+
+@router.get("/crypto/bars/{symbol:path}")
+async def get_crypto_bars(
+    symbol: str,
+    timeframe: str = "1Day",
+    days: int = Query(default=180, ge=1, le=3650),
+    user: str = Depends(get_current_user),
+) -> dict:
+    broker = get_broker()
+    start = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        bars = await broker.get_crypto_bars(symbol, timeframe=timeframe, start=start)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    return {"symbol": symbol, "count": len(bars), "bars": bars}
+
+
+# ── News sentiment (heuristic on Alpaca headlines) ────────────────
+_POS_WORDS = {
+    "beat", "beats", "exceed", "exceeds", "surge", "surges", "soar", "soars",
+    "jump", "jumps", "rally", "rallies", "gain", "gains", "rise", "rises",
+    "upgrade", "upgrades", "outperform", "buy", "bullish", "record", "strong",
+    "profit", "profits", "growth", "boost", "boosts", "raise", "raises",
+    "approve", "approves", "win", "wins", "positive",
+}
+_NEG_WORDS = {
+    "miss", "misses", "drop", "drops", "fall", "falls", "plunge", "plunges",
+    "slump", "slumps", "downgrade", "downgrades", "underperform", "sell",
+    "bearish", "weak", "loss", "losses", "decline", "declines", "cut", "cuts",
+    "warn", "warns", "warning", "lawsuit", "investigation", "probe", "fraud",
+    "fire", "fires", "layoff", "layoffs", "delay", "negative", "concern",
+}
+
+
+def _score_headline(text: str) -> int:
+    if not text:
+        return 0
+    words = {w.strip(".,!?:;()[]").lower() for w in text.split()}
+    pos = len(words & _POS_WORDS)
+    neg = len(words & _NEG_WORDS)
+    return pos - neg
+
+
+@router.get("/analysis/{symbol}")
+async def get_analysis(
+    symbol: str,
+    include_news: bool = Query(default=True),
+    user: str = Depends(get_current_user),
+) -> dict:
+    """Aggregate stock analysis: returns, technicals, risk, factor score, seasonality."""
+    payload = await analysis.get_full_analysis(symbol)
+    # Layer on yfinance signals that don't require bars
+    try:
+        payload["earnings_surprise"] = await fund.get_earnings_surprise(symbol)
+    except Exception:
+        payload["earnings_surprise"] = None
+    try:
+        payload["short_interest"] = await fund.get_short_interest(symbol)
+    except Exception:
+        payload["short_interest"] = None
+    if include_news:
+        try:
+            broker = get_broker()
+            articles = await broker.get_news(symbols=[symbol.upper()], limit=10)
+            payload["news"] = articles
+        except Exception:
+            payload["news"] = []
+    return payload
+
+
+@router.get("/earnings-surprise/{symbol}")
+async def get_earnings_surprise(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_earnings_surprise(symbol)
+
+
+@router.get("/short-interest/{symbol}")
+async def get_short_interest(symbol: str, user: str = Depends(get_current_user)) -> dict:
+    return await fund.get_short_interest(symbol)
+
+
+@router.get("/news-sentiment/{symbol}")
+async def get_news_sentiment(
+    symbol: str,
+    limit: int = Query(default=30, ge=1, le=50),
+    user: str = Depends(get_current_user),
+) -> dict:
+    broker = get_broker()
+    try:
+        articles = await broker.get_news(symbols=[symbol.upper()], limit=limit)
+    except AlpacaError as e:
+        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    pos = neg = neu = 0
+    enriched = []
+    for a in articles:
+        s = _score_headline(f"{a.get('headline','')} {a.get('summary','')}")
+        label = "positive" if s > 0 else "negative" if s < 0 else "neutral"
+        if s > 0:
+            pos += 1
+        elif s < 0:
+            neg += 1
+        else:
+            neu += 1
+        enriched.append({
+            "id": a.get("id"),
+            "headline": a.get("headline"),
+            "summary": a.get("summary"),
+            "url": a.get("url"),
+            "source": a.get("source"),
+            "symbols": a.get("symbols", []),
+            "published_at": a.get("created_at"),
+            "sentiment_score": s,
+            "sentiment": label,
+        })
+    total = max(1, pos + neg + neu)
+    return {
+        "symbol": symbol.upper(),
+        "summary": {
+            "positive": pos,
+            "negative": neg,
+            "neutral": neu,
+            "positive_pct": round(pos / total * 100, 1),
+            "negative_pct": round(neg / total * 100, 1),
+            "net_score": pos - neg,
+        },
+        "articles": enriched,
+    }
