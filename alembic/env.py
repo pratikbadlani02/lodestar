@@ -15,12 +15,15 @@ except ImportError:
 
 from app.core.db import Base
 from app.core import models  # noqa: F401
+from app.core.config import settings
 
 config = context.config
 
-database_url = os.environ.get("DATABASE_URL", "")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# Use the Settings-coerced URL so Render / Heroku-style `postgres://...`
+# is normalised to `postgresql+asyncpg://...` before alembic's
+# async_engine_from_config sees it. Reading os.environ directly would skip
+# that coercion and trip "asyncio extension requires an async driver".
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

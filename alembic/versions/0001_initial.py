@@ -39,9 +39,26 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("time", "symbol", "timeframe"),
     )
     op.create_index("ix_ohlcv_symbol_time", "ohlcv", ["symbol", sa.text("time DESC")])
-    # TimescaleDB 2.x API uses by_range() — NOT the old positional form
+    # Convert to a TimescaleDB hypertable when the extension is available
+    # (local dev). On vanilla Postgres (e.g. Render free tier) the extension
+    # isn't installed — fall back to the plain table, which still works,
+    # just without the chunking optimisation.
     op.execute(
-        "SELECT create_hypertable('ohlcv', by_range('time', INTERVAL '7 days'), if_not_exists => TRUE);"
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb'
+            ) THEN
+                CREATE EXTENSION IF NOT EXISTS timescaledb;
+                PERFORM create_hypertable(
+                    'ohlcv', by_range('time', INTERVAL '7 days'),
+                    if_not_exists => TRUE
+                );
+            END IF;
+        END
+        $$;
+        """
     )
 
     # ── Strategies ───────────────────────────────────────────────────────
