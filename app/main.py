@@ -28,7 +28,10 @@ async def lifespan(app: FastAPI):
         logger.critical("LIVE_TRADING_ENABLED", message="⚠️  LIVE TRADING IS ACTIVE")
     else:
         logger.info("paper_trading_mode")
-    await init_control_state()
+    try:
+        await init_control_state()
+    except Exception as exc:
+        logger.error("redis_init_failed", error=str(exc))
     scheduler_start()
     yield
     logger.info("shutdown")

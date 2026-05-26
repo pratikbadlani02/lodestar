@@ -22,7 +22,12 @@ _redis: aioredis.Redis | None = None
 async def get_redis() -> aioredis.Redis:
     global _redis
     if _redis is None:
-        _redis = await aioredis.from_url(settings.redis_url, decode_responses=True)
+        _redis = await aioredis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=10,
+            socket_timeout=10,
+        )
     return _redis
 
 
