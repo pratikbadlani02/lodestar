@@ -20,7 +20,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.core.logging import get_logger
-from app.services.control import get_redis
+from app.core.redis_client import get_redis
 
 logger = get_logger(__name__)
 

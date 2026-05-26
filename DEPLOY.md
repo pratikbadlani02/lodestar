@@ -1,12 +1,8 @@
 # Deploying Lodestar to Render
 
-This walks you through getting Lodestar live on the public internet
-behind a Render-provided subdomain (e.g. `lodestar-api.onrender.com`).
-
-> ⚠️ This is a brokerage-integrated platform. Anyone who logs in can place
-> trades on your linked Alpaca account. Use a **strong** `ADMIN_PASSWORD`,
-> keep `ALPACA_BASE_URL` on paper, and leave `TRADING_ENABLED=false` until
-> you've verified the deployment end-to-end.
+Lodestar is a **public market-data viewer**. No login, no trading, no
+account balances. Anyone with the URL can browse charts, screener,
+fundamentals, earnings, and so on.
 
 ---
 
@@ -14,50 +10,32 @@ behind a Render-provided subdomain (e.g. `lodestar-api.onrender.com`).
 
 Single Docker container runs everything:
 
-- FastAPI HTTP server (uvicorn)
-- React frontend served as static files from `frontend/dist`
-- **APScheduler** running inside the FastAPI event loop — replaces the old
-  Celery beat + worker. All periodic tasks (strategy execution every 60s,
-  position monitoring every 30s, order sync every 30s, account snapshots,
-  market-data refresh, daily P&L, price alerts) are scheduled in-process.
-- On-demand long tasks (backtests, optimizer runs) are dispatched as
-  asyncio background tasks; CPU-heavy compute is pushed to a thread pool.
+- FastAPI serves market-data endpoints under `/api/*`
+- The built React frontend is served from the same container
+- No scheduler, no Celery, no background workers
+- Alpaca's market-data API supplies OHLCV / snapshots; yfinance backs the
+  fundamentals / earnings / dividends endpoints
 
-| Component        | Service type           | Plan      | Notes                                 |
-|------------------|------------------------|-----------|---------------------------------------|
-| API + frontend + scheduler | Web Service (Docker) | Free | Sleeps after 15 min idle (see below)  |
-| Postgres         | Managed Database       | Free      | 1 GB, **expires after 90 days**       |
-| Redis            | External (Upstash)     | Free      | Cache + WebSocket pub/sub only        |
-
----
-
-## Free-tier sleep caveat
-
-Render's free web service hibernates after 15 minutes with no traffic.
-**While asleep, the in-process scheduler does not run** — strategies don't
-tick, positions don't get monitored, orders don't sync.
-
-Two options:
-
-1. **External pinger (free)** — Sign up at https://cron-job.org or
-   https://uptimerobot.com (both free). Configure a job to hit
-   `https://lodestar-api.onrender.com/api/health` every 10 minutes
-   during US market hours (13:30–20:00 UTC, Mon–Fri).
-2. **Upgrade to Starter ($7/mo)** — no sleep, no pinger needed.
+| Component  | Service type           | Plan    | Notes                                 |
+|------------|------------------------|---------|---------------------------------------|
+| API + frontend | Web Service (Docker) | Free    | Sleeps after 15 min idle              |
+| Postgres   | Managed Database       | Free    | 1 GB, expires after 90 days           |
+| Redis      | Upstash (optional)     | Free    | Fundamentals JSON cache only          |
 
 ---
 
 ## One-time prerequisites
 
-1. **GitHub account** with this repo pushed up (Render deploys from GitHub).
-2. **Render account** — https://render.com (GitHub login is fine).
-3. **Upstash account** for Redis — https://upstash.com.
-4. **Alpaca paper trading keys** — already in your `.env`; you'll paste them
-   into Render's dashboard, not commit them.
+1. **GitHub account** with this repo pushed up.
+2. **Render account** — https://render.com.
+3. **Alpaca account** — https://app.alpaca.markets. The free paper account
+   is fine; we only use the market-data API. Note your API key + secret.
+4. *(Optional)* **Upstash account** for the fundamentals cache — https://upstash.com.
+5. *(Optional)* **Sentry account** for error tracking — https://sentry.io.
 
 ---
 
-## Step 1 — Initialize git and push to GitHub
+## Step 1 — Push to GitHub
 
 ```bash
 cd /Users/pbadlani/quant-platform
@@ -66,7 +44,7 @@ git add .
 git commit -m "Initial commit"
 ```
 
-Create an empty private repo on GitHub (do **not** add a README), then:
+Create an empty private repo on GitHub, then:
 
 ```bash
 git remote add origin git@github.com:<your-user>/lodestar.git
@@ -74,116 +52,91 @@ git branch -M main
 git push -u origin main
 ```
 
-⚠️ Before pushing, double-check `.gitignore` excludes `.env`:
-
-```bash
-grep -E '^\.env$' .gitignore || echo ".env" >> .gitignore
-git rm --cached .env 2>/dev/null || true
-```
+Double-check `.gitignore` excludes `.env` before pushing.
 
 ---
 
-## Step 2 — Set up Upstash Redis
-
-1. Log in to https://console.upstash.com.
-2. **Create Database** → name it `lodestar-redis`, pick the region closest to
-   Render's Oregon (US-West-1).
-3. Copy the **Redis URL** (looks like `rediss://default:xxx@xxx.upstash.io:6379`).
-4. You'll paste this into Render as `REDIS_URL` in Step 4.
-
----
-
-## Step 3 — Deploy via Render Blueprint
+## Step 2 — Deploy via Render Blueprint
 
 1. In Render dashboard: **New +** → **Blueprint**.
 2. Connect your GitHub repo.
-3. Render reads `render.yaml` and shows you what it'll create:
+3. Render reads `render.yaml` and shows the resources:
    - `lodestar-api` (web service, free)
    - `lodestar-db` (Postgres, free)
-4. Click **Apply**. First build takes ~5–10 min (frontend + Python deps).
+4. Click **Apply**. First build is ~5–10 min.
 
 ---
 
-## Step 4 — Fill in the dashboard-only secrets
+## Step 3 — Fill in the dashboard-only secrets
 
-The blueprint marks several env vars as `sync: false` — meaning you set them
-in the dashboard, not in the YAML. Open **lodestar-api** → **Environment**:
+Open **lodestar-api** → **Environment** and add:
 
-| Key                    | Value                                              |
-|------------------------|----------------------------------------------------|
-| `ADMIN_USERNAME`       | Pick a username (NOT `admin`)                      |
-| `ADMIN_PASSWORD`       | Run `openssl rand -base64 24` and use the output   |
-| `REDIS_URL`            | `rediss://default:...@...upstash.io:6379`          |
-| `CORS_ORIGINS`         | `https://lodestar-api.onrender.com` (your URL)     |
-| `ALPACA_API_KEY`       | From `.env`                                        |
-| `ALPACA_SECRET_KEY`    | From `.env`                                        |
+| Key                  | Value                                              |
+|----------------------|----------------------------------------------------|
+| `ALPACA_API_KEY`     | From your Alpaca paper account                     |
+| `ALPACA_SECRET_KEY`  | From your Alpaca paper account                     |
+| `CORS_ORIGINS`       | `https://lodestar-api.onrender.com`                |
+| `REDIS_URL`          | (optional) Upstash URL — leave blank if unused     |
+| `SENTRY_DSN`         | (optional) Sentry project DSN                      |
 
-Click **Save Changes**. Render auto-redeploys.
+Save → Render auto-redeploys.
 
 ---
 
-## Step 5 — Verify
+## Step 4 — Verify
 
-Once the deploy finishes (green dot), visit:
+Once the deploy is green:
 
-- `https://lodestar-api.onrender.com/api/health` → returns `{"status":"ok",...}`
-- `https://lodestar-api.onrender.com/api/docs` → FastAPI Swagger UI
-- `https://lodestar-api.onrender.com/` → React dashboard login
-
-Log in with the `ADMIN_USERNAME` / `ADMIN_PASSWORD` you set.
-
-In the API logs you should see `scheduler_started jobs=[...]` once on boot,
-followed by interval ticks (`run_active_strategies`, `monitor_open_positions`,
-etc.). If you don't see those, the scheduler didn't start.
+- `https://lodestar-api.onrender.com/api/health` → `{"status":"ok",...}`
+- `https://lodestar-api.onrender.com/api/market/snapshots?symbols=AAPL,MSFT` → JSON
+- `https://lodestar-api.onrender.com/` → market overview, no login
 
 ---
 
-## Step 6 — Set up the keep-alive pinger
+## Step 5 — (Optional) Keep the service awake during market hours
 
-(Skip if you upgraded to Starter.)
+Free Render web services hibernate after 15min idle. The first hit after
+that takes ~30s to cold-start. To keep the landing page snappy during US
+market hours, set up a free pinger:
 
-1. Sign up at https://cron-job.org (free, no card).
-2. **Create cronjob**:
+1. Sign up at https://cron-job.org or https://uptimerobot.com.
+2. Configure a job:
    - URL: `https://lodestar-api.onrender.com/api/health`
-   - Schedule: `*/10 13-20 * * 1-5` (every 10 min during US market hours, weekdays)
-   - Notifications: enable failure notifications so you know if the service dies.
-3. Save.
+   - Schedule: `*/10 13-20 * * 1-5` (every 10 min during 9:30am–4:00pm ET)
+3. Enable failure notifications.
+
+Outside market hours, let it sleep — it's a viewer, nothing breaks.
 
 ---
 
-## Step 7 — Turn on trading
+## Hardening (already enforced in code)
 
-Once you've verified manual API calls work end-to-end:
+- Security headers (`X-Frame-Options: DENY`, `X-Content-Type-Options`,
+  `Referrer-Policy`, `Permissions-Policy`) on every response.
+- In production: HSTS (6mo) and a baseline Content-Security-Policy.
+- `/api/docs`, `/api/redoc`, `/api/openapi.json` are disabled in
+  production — the schema does not leak.
+- CORS locked to the origins listed in `CORS_ORIGINS`.
+- Only `GET` is allowed via CORS — nothing mutates server state from the
+  browser anyway.
 
-1. In Render dashboard → Environment, flip:
-   - `TRADING_ENABLED=true`
-   - `STRATEGIES_ENABLED=true`
-2. The next strategy tick (within 60s of restart) will run live.
+## Manual TODOs
+
+- [ ] **Set up Sentry.** Create a Python project, paste the DSN as
+      `SENTRY_DSN` in Render.
+- [ ] **Schedule database backups.**
+      `crontab -e` → `0 3 * * * cd /Users/pbadlani/quant-platform && \
+      DATABASE_URL_SYNC='<render-pg-url>' ./scripts/backup_db.sh`.
+- [ ] **Calendar the 90-day Postgres expiry.** Free Render Postgres dies
+      after 90 days. Spin up a new free DB and restore from your latest
+      backup, or just accept the cache resets.
+- [ ] **Uptime monitoring** (free): UptimeRobot or BetterStack hitting
+      `/api/health` every 5 min.
 
 ---
 
-## Hardening still TODO
+## Local development
 
-(The "harden after" half of your deploy-first decision.)
-
-- [ ] Rotate `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` — they've been in your
-      local `.env` and shell history; treat them as compromised.
-- [ ] Add login rate-limiting (`slowapi`) on `/api/auth/login`.
-- [ ] Schedule `pg_dump` to S3/B2 (free Postgres has no backups).
-- [ ] Mark the 90-day Postgres expiry on your calendar — when it hits,
-      you'll need to spin up a new free DB and restore.
-- [ ] Consider Cloudflare Access in front for an extra auth layer.
-
----
-
-## Local development unchanged
-
-The Dockerfile + render.yaml are additive. Locally you can still run
-`./manage.sh start` (which now loads only `com.quant.api` — the scheduler
-lives inside it). The old `com.quant.worker` and `com.quant.beat` services
-are gone; bootout any that are still loaded:
-
-```bash
-launchctl bootout gui/$(id -u)/com.quant.worker 2>/dev/null
-launchctl bootout gui/$(id -u)/com.quant.beat 2>/dev/null
-```
+`./manage.sh start` loads `com.quant.api` (the only remaining service).
+There is no Celery worker, no beat scheduler — everything runs inside the
+single uvicorn process.

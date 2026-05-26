@@ -1,14 +1,11 @@
 # Render Blueprint — Lodestar
 #
-# Single web service runs API, frontend, and the in-process scheduler
-# (APScheduler — see app/scheduler.py). No separate Celery worker or beat.
+# Public market-data viewer. No auth, no trading, no background workers.
+# One Docker container serves the API and the built React frontend; a free
+# managed Postgres caches OHLCV bars and (optionally) Upstash Redis caches
+# fundamentals.
 #
 # Apply: Render Dashboard → New → Blueprint → point at this repo.
-#
-# Free tier caveat: the web instance sleeps after 15min idle. While asleep
-# the in-process scheduler does NOT run, so strategies don't tick. During
-# market hours, keep it warm with an external pinger hitting /api/health
-# every 10min (cron-job.org, uptimerobot, or similar — both free).
 
 services:
   - type: web
@@ -25,12 +22,6 @@ services:
         value: production
       - key: LOG_LEVEL
         value: INFO
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ADMIN_USERNAME
-        sync: false        # set in dashboard
-      - key: ADMIN_PASSWORD
-        sync: false        # set in dashboard (use a strong value)
       - key: DATABASE_URL
         fromDatabase:
           name: lodestar-db
@@ -40,23 +31,19 @@ services:
           name: lodestar-db
           property: connectionString
       - key: REDIS_URL
-        sync: false        # paste from Upstash (rediss://...)
+        sync: false        # paste from Upstash (rediss://...) — used only for fundamentals cache
       - key: CORS_ORIGINS
         sync: false        # e.g. "https://lodestar-api.onrender.com"
       - key: ALPACA_API_KEY
-        sync: false
+        sync: false        # market-data only; even a paper key works
       - key: ALPACA_SECRET_KEY
         sync: false
       - key: ALPACA_BASE_URL
         value: https://paper-api.alpaca.markets
       - key: ALPACA_DATA_URL
         value: https://data.alpaca.markets
-      - key: ALPACA_LIVE_CONFIRMED
-        value: "false"
-      - key: TRADING_ENABLED
-        value: "false"     # flip to true after first successful deploy
-      - key: STRATEGIES_ENABLED
-        value: "false"
+      - key: SENTRY_DSN
+        sync: false        # optional; leave blank to disable
 
 databases:
   - name: lodestar-db

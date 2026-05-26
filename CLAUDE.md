@@ -1,85 +1,100 @@
-# Quant Platform — Session Context
+# Lodestar — Session Context
 
-## What Was Done This Session
+## What this repo is now
 
-### v2 Patch Applied
-- Copied `/Users/pbadlani/Downloads/v2-patch` into the project
-- Ran `alembic upgrade head` (migration 0001 → 0002)
-- Built frontend (`npm run build`)
+**Public market-data viewer.** No login, no trading. The product was
+pivoted in v3.0.0 from a single-tenant quant trading platform to a
+read-only market browser, because the original would have exposed the
+operator's Alpaca brokerage to anyone with the URL.
 
-### Bugs Found & Fixed
+Surviving feature set:
 
-**Bug #1 — Enum case mismatch (CRITICAL, FIXED)**
-- File: `app/core/models.py`
-- All 8 `Enum(...)` columns now include `values_callable=lambda x: [e.value for e in x]`
-- Without this, asyncpg was sending `"PENDING"` (name) instead of `"pending"` (value)
+- Market overview (`/`), Stocks, Screener, Heatmap, Movers, Tape, Crypto
+- Per-symbol research: Analysis, Fundamentals, Options, Earnings,
+  Dividends, Insiders, Compare
 
-**Bug #2 — WebSocket 404 (FIXED)**
-- File: `/opt/homebrew/etc/nginx/servers/quant.conf` and `nginx/quant.conf`
-- Added dedicated `/api/ws` location block with `Upgrade` headers BEFORE the generic `/api/` block
-- The generic block had `Connection: ""` which stripped the WebSocket upgrade
+Hard-deleted in v3.0.0:
 
-**Bug #3 — Event loop closed across Celery tasks (FIXED)**
-- File: `app/worker.py`
-- Each Celery task calls `asyncio.run()` which creates a new event loop
-- asyncpg, redis.asyncio, and httpx AsyncClient pools were bound to the old loop
-- Fix: `_run_async()` now disposes SA engine pool, resets `_control_svc._redis = None`, and resets `_broker_svc._broker._client = None` before each `asyncio.run()`
+- All auth (login, JWT, admin user, rate limiter, disclaimer modal)
+- Strategies / backtests / optimizer
+- Trade / Paper / Orders / Positions / Watchlists / Price Alerts
+- Risk Analytics / Alerts / Audit Log / Settings / Users
+- Celery worker + beat, `app/scheduler.py`, `app/tasks.py`,
+  `app/worker.py`
+- Backend modules: `app/api/{auth,account,audit,backtests,control,orders,strategies,price_alerts,users,watchlists,realtime,analytics}.py`
+  and `app/services/{alerts,audit,backtester,control,execution,optimizer,position_monitor,risk,risk_analytics,websocket}.py`
+  plus the entire `app/strategies/` package and `app/core/security.py`
+- Frontend pages: Login, Workspace, Trade, Paper, Orders, Positions,
+  Watchlists, Strategies, Backtests*, Optimizer, RiskAnalytics, Alerts,
+  PriceAlerts, AuditLog, Settings, Users
+- Frontend components: `OrderSlideOver`, `DisclaimerGate`, `WatchRail`,
+  `lib/store.js`
+- Launchd plists: `com.quant.worker.plist`, `com.quant.beat.plist`
 
-**Bug #4 — StrategyUpdate schema missing fields (FIXED)**
-- File: `app/core/schemas.py`
-- `StrategyUpdate` was missing `name`, `stop_loss_pct`, `take_profit_pct`, `trailing_stop_pct`, `max_hold_days`, `timeframe`
-- `StrategyRead` was missing all v2 fields too
-- Both updated with the missing fields
+## Tech stack today
 
-### Services Current State
-- `com.quant.api` — **DOWN** (was accidentally bootout'd during testing, needs restart)
-- `com.quant.worker` — running (PID ~39588)
-- `com.quant.beat` — running (PID ~25548)
-- nginx — running
+| Layer    | What                                              |
+|----------|--------------------------------------------------|
+| Frontend | React + Vite, served as static files from FastAPI |
+| API      | FastAPI (uvicorn), only `health` + `market` routers |
+| DB       | Postgres (cache for OHLCV bars)                  |
+| Cache    | Optional Upstash Redis (fundamentals JSON cache) |
+| Data     | Alpaca market-data + yfinance                    |
+| Deploy   | Single Render web service (free tier) + Render free Postgres |
 
-### Restart API
-```bash
-UID_NUM=$(id -u)
-launchctl bootstrap "gui/$UID_NUM" ~/Library/LaunchAgents/com.quant.api.plist
-until curl -s http://localhost:8080/api/health | grep -q '"status":"ok"'; do sleep 2; done
-echo "api healthy"
-```
+There is no background process. No Celery, no APScheduler. Everything
+runs in the uvicorn event loop.
 
----
+## How to develop locally
 
-## What Still Needs To Be Done
+`./manage.sh start` boots only `com.quant.api`. The previous worker/beat
+launchd services are gone. Run `./manage.sh logs api` to follow the log
+stream. Frontend dev: `cd frontend && npm run dev`.
 
-### Remaining Test Scenarios
-1. ✅ Auth & health — PASSED
-2. ✅ Strategy CRUD (all 7 types) — PASSED (after Bug #4 fix)
-3. ✅ Backtests (all 7 types) — ALL COMPLETED successfully after Bug #3 fix
-4. ✅ Order flow — PASSED (correctly rejected market-closed)
-5. ✅ Account & positions — PASSED
-6. ✅ Analytics (equity-curve, portfolio-risk, strategy-pnl) — PASSED
-7. ✅ Alerts — PASSED (0 alerts, expected)
-8. ✅ Optimizer — PASSED (completed, best_sharpe=1.405, 4 results)
-9. ✅ Export CSV (orders + backtest trades) — PASSED
-10. ✅ WebSocket — PASSED (after Bug #2 fix)
-11. ✅ Webhook — PASSED (HTTP 200)
+## Important files
 
-### Final Steps Remaining
-- [ ] Restart API (it went down)
-- [ ] Verify Bug #1 (PATCH strategy name) works with running API
-- [ ] Final scan of API + worker logs for any remaining errors
-- [ ] Produce final bug report summary
+- `app/main.py` — FastAPI entrypoint, security-headers middleware, CORS
+  (locked to GET), static-frontend mount.
+- `app/api/market.py` — all the public market-data endpoints
+- `app/api/health.py` — `/api/health` (DB + Alpaca clock probe)
+- `app/services/broker.py` — thin httpx wrapper around Alpaca's HTTP API
+- `app/services/market_data.py`, `fundamentals.py`, `stock_analysis.py`,
+  `market_calendar.py` — the data services
+- `app/core/redis_client.py` — Redis singleton used by `fundamentals.py`
+- `app/core/config.py` — slim settings, no auth/risk/trading flags
+- `frontend/src/App.jsx` — flat routes, no `RequireAuth`
+- `frontend/src/components/Layout.jsx` — public-only sidebar (Markets +
+  Research)
 
-### Test Token (valid ~24h from session start)
-```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc3NzY4NzIxMSwiaWF0IjoxNzc3NjAwODExfQ.Z_r4zCH7kHwkUIo1cz127mCeAskVBCW9ORTlvxS36ck
-```
-Or get a fresh one: `curl -s -X POST http://localhost:8080/api/auth/login -d "username=admin&password=admin"`
+## Environment variables
 
----
+Required: `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `DATABASE_URL`
+Optional: `REDIS_URL`, `CORS_ORIGINS`, `SENTRY_DSN`, `APP_ENV`
 
-## Key Files Changed This Session
-- `app/core/models.py` — values_callable on all 8 Enum columns
-- `app/core/schemas.py` — StrategyUpdate + StrategyRead v2 fields
-- `app/worker.py` — _run_async() resets all async singletons
-- `nginx/quant.conf` — WebSocket location block
-- `/opt/homebrew/etc/nginx/servers/quant.conf` — same (deployed config)
-- `~/.claude/settings.json` — permissions defaultMode=auto
+No `ADMIN_*`, `SECRET_KEY`, `TRADING_ENABLED`, `STRATEGIES_ENABLED`,
+`ALPACA_LIVE_CONFIRMED`, or risk-limit envs — all gone.
+
+## Deploy
+
+See `DEPLOY.md`. Single Render web service + free Postgres. No paid
+background workers needed.
+
+## What is still in the repo but unused
+
+- `app/core/models.py` — most of the SQLAlchemy models still exist
+  (`Strategy`, `Backtest`, `Order`, etc.). They aren't imported by any
+  surviving code, but the Alembic migrations still create their tables.
+  Cleaning these out is a follow-up: a new migration that drops the
+  tables, then trim `models.py`.
+- `alembic/versions/0001_*.py`, `0002_*.py` — initial schemas that
+  include the trading tables. Left alone for now.
+- `tests/` — likely covers removed features; tests will need an audit.
+
+## Known issues / next steps
+
+- The `app/core/models.py` cleanup mentioned above.
+- `tests/` directory hasn't been audited against the new shape.
+- The `CommandPalette` and various pages still import lucide-react icons
+  they no longer use; harmless but visual cruft.
+- `nginx/quant.conf` still proxies `/api/ws` for a WebSocket that no
+  longer exists — the block is dead-but-not-broken; remove on next pass.

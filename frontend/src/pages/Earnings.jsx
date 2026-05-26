@@ -73,14 +73,8 @@ export default function Earnings() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [watchlists, setWatchlists] = useState([])
-  const [selected, setSelected] = useState('')
   const [filter, setFilter] = useState('all')
   const ctx = useSymbolContextMenu()
-
-  useEffect(() => {
-    api.listWatchlists().then(setWatchlists).catch(() => setWatchlists([]))
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -99,21 +93,6 @@ export default function Earnings() {
     load()
     return () => { cancelled = true }
   }, [symbols])
-
-  async function loadWatchlist(id) {
-    setSelected(id)
-    if (!id) return
-    try {
-      const q = await api.getWatchlistQuotes(id)
-      const syms = (q.items || q.symbols || q.results || []).map((x) => x.symbol || x).filter(Boolean)
-      if (syms.length) {
-        const j = syms.join(',')
-        setSymbolsInput(j); setSymbols(j)
-      }
-    } catch (e) {
-      setError(`Could not load watchlist: ${e.message}`)
-    }
-  }
 
   function submit(e) {
     e.preventDefault()
@@ -183,14 +162,6 @@ export default function Earnings() {
           </button>
         </form>
 
-        <select
-          value={selected}
-          onChange={(e) => loadWatchlist(e.target.value)}
-          className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm"
-        >
-          <option value="">— From watchlist —</option>
-          {watchlists.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
       </div>
 
       {/* Filter chips */}
