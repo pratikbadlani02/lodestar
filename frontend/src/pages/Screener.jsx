@@ -282,9 +282,9 @@ export default function Screener() {
         ))}
       </Card>
 
-      <div className="grid grid-cols-12 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         {/* ── Filter Panel (compact) ─────────────────────────────── */}
-        <Card className="col-span-12 lg:col-span-3 p-4 space-y-4 self-start">
+        <Card className="lg:col-span-3 p-4 space-y-4 self-start">
           <div className="space-y-2">
             <h3 className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Symbol</h3>
             <Input
@@ -373,7 +373,7 @@ export default function Screener() {
         </Card>
 
         {/* ── Results Panel ──────────────────────────────────────── */}
-        <div className="col-span-12 lg:col-span-9 space-y-3 min-w-0">
+        <div className="lg:col-span-9 space-y-3 min-w-0">
           {/* Active filter chips */}
           {activeChips.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">

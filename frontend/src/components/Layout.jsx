@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import {
   Bot, BarChart3, ListOrdered, Briefcase,
@@ -7,6 +7,7 @@ import {
   TrendingUp, Filter, Zap, FlaskConical,
   Layers, Building2, Calendar, LayoutGrid,
   Radio, Bitcoin, Coins, Gauge, PanelLeftClose, PanelLeftOpen, ChevronDown,
+  X,
 } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { api } from '../lib/api'
@@ -88,12 +89,25 @@ function hasToken() {
 
 export default function Layout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const control    = useStore(selectControl)
   const health     = useStore(selectHealth)
   const unackCount = useStore(selectUnackCount)
   const [collapsed, setCollapsed] = useState(loadCollapsed)
   const [groupCollapsed, setGroupCollapsed] = useState(loadGroupCollapsed)
   const [authed, setAuthed] = useState(hasToken)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  // Close the mobile drawer when the route changes.
+  useEffect(() => { setMobileNavOpen(false) }, [location.pathname])
+
+  // Lock body scroll while the mobile drawer is open.
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [mobileNavOpen])
 
   // Boot the global store + WS only after auth. Anonymous users don't fetch
   // any private state. Re-check after navigation in case Login just ran.
@@ -157,8 +171,16 @@ export default function Layout() {
 
   return (
     <div className="flex flex-col h-screen bg-surf-0">
-     <div className="flex-1 flex min-h-0">
-      <aside className={`${collapsed ? 'w-14' : 'w-56'} bg-surf-1/80 backdrop-blur-xl border-r border-white/[0.06] flex flex-col relative transition-[width] duration-200`}>
+     <div className="flex-1 flex min-h-0 relative">
+      {/* Mobile drawer backdrop */}
+      {mobileNavOpen && (
+        <div
+          onClick={() => setMobileNavOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          aria-hidden="true"
+        />
+      )}
+      <aside className={`${collapsed ? 'md:w-14' : 'md:w-56'} w-64 bg-surf-1/95 md:bg-surf-1/80 backdrop-blur-xl border-r border-white/[0.06] flex flex-col fixed md:relative inset-y-0 left-0 z-50 md:z-auto transition-transform md:transition-[width] duration-200 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-accent/20 to-transparent" />
 
         {/* Brand mark + collapse toggle */}
@@ -183,9 +205,17 @@ export default function Layout() {
             <button
               onClick={() => setCollapsed((c) => !c)}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-ink-4 hover:text-ink-1 hover:bg-white/[0.06] transition ${collapsed ? 'mx-auto mt-2' : ''}`}
+              className={`hidden md:flex shrink-0 w-6 h-6 rounded-md items-center justify-center text-ink-4 hover:text-ink-1 hover:bg-white/[0.06] transition ${collapsed ? 'mx-auto mt-2' : ''}`}
             >
               {collapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />}
+            </button>
+            {/* Mobile close — only visible inside the drawer on phones */}
+            <button
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Close navigation"
+              className="md:hidden shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-ink-3 hover:text-ink-1 hover:bg-white/[0.06] transition"
+            >
+              <X size={15} />
             </button>
           </div>
         </div>
@@ -313,16 +343,16 @@ export default function Layout() {
         </div>
       </aside>
 
-      {authed && <WatchRail />}
+      {authed && <div className="hidden lg:flex"><WatchRail /></div>}
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <TopBar />
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <TopBar onMenuOpen={() => setMobileNavOpen(true)} />
         <Ticker />
         {authed && isLive && !tradingOn && (
-          <div className="bg-down/10 border-b border-down/25 px-4 py-2 text-xs text-down flex items-center gap-2 backdrop-blur-sm">
-            <AlertTriangle size={12} />
+          <div className="bg-down/10 border-b border-down/25 px-3 md:px-4 py-2 text-xs text-down flex items-center gap-2 backdrop-blur-sm">
+            <AlertTriangle size={12} className="shrink-0" />
             <span className="font-medium">Trading is HALTED.</span>
-            <span className="text-ink-3">Use Settings → Resume to re-enable.</span>
+            <span className="text-ink-3 hidden sm:inline">Use Settings → Resume to re-enable.</span>
           </div>
         )}
         <div className="flex-1 overflow-auto">

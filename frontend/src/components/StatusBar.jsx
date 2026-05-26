@@ -109,33 +109,33 @@ export default function StatusBar({ control, health, authed = false }) {
     latency < 400   ? 'text-warn' : 'text-down'
 
   return (
-    <footer className="h-7 px-3 flex items-center gap-3 text-2xs font-mono tabular border-t border-white/[0.06] bg-surf-1/85 backdrop-blur z-20">
+    <footer className="h-7 px-2 md:px-3 flex items-center gap-2 md:gap-3 text-2xs font-mono tabular border-t border-white/[0.06] bg-surf-1/85 backdrop-blur z-20 overflow-hidden">
       {/* Market session + clock */}
-      <span className={`inline-flex items-center gap-1.5 px-1.5 py-px rounded ${session.tone}`}>
+      <span className={`inline-flex items-center gap-1.5 px-1.5 py-px rounded shrink-0 ${session.tone}`}>
         <span className={`w-1.5 h-1.5 rounded-full ${session.state === 'regular' ? 'bg-up soft-pulse' : session.state === 'pre' ? 'bg-info' : session.state === 'post' ? 'bg-warn' : 'bg-ink-5'}`} />
         <span className="font-semibold tracking-wider">{session.label}</span>
       </span>
-      <span className="text-ink-3">
+      <span className="text-ink-3 shrink-0">
         <Clock size={10} className="inline-block -mt-0.5 mr-1" />
         {clock.hhmm} <span className="text-ink-5">ET</span>
       </span>
-      <span className="text-ink-5">·</span>
-      <span className="text-ink-4">→ {session.next}</span>
+      <span className="text-ink-5 hidden sm:inline">·</span>
+      <span className="text-ink-4 hidden sm:inline shrink-0">→ {session.next}</span>
 
       {/* Connection */}
-      <span className={`inline-flex items-center gap-1 ml-3 ${wsHealthy ? 'text-up' : 'text-down'}`}>
+      <span className={`inline-flex items-center gap-1 ml-2 md:ml-3 shrink-0 ${wsHealthy ? 'text-up' : 'text-down'}`}>
         {wsHealthy ? <Wifi size={11} /> : <WifiOff size={11} />}
-        {wsHealthy ? 'connected' : 'offline'}
+        <span className="hidden sm:inline">{wsHealthy ? 'connected' : 'offline'}</span>
       </span>
 
       {/* Latency */}
-      <span className={`inline-flex items-center gap-1 ${latTone}`}>
+      <span className={`hidden sm:inline-flex items-center gap-1 shrink-0 ${latTone}`}>
         <Zap size={11} />
         {latency != null ? `${latency}ms` : '—'}
       </span>
 
-      {/* Center: account snapshot */}
-      <div className="flex-1 flex items-center justify-center gap-4 text-ink-3">
+      {/* Center: account snapshot — hidden on small screens */}
+      <div className="flex-1 hidden lg:flex items-center justify-center gap-4 text-ink-3 min-w-0">
         {equity != null && (
           <>
             <span><span className="text-ink-5 mr-1">EQ</span><span className="text-ink-1">${fmtBig(equity)}</span></span>
@@ -154,12 +154,13 @@ export default function StatusBar({ control, health, authed = false }) {
           </>
         )}
       </div>
+      <div className="flex-1 lg:hidden" />
 
       {/* Right: last sync + ⌘K hint */}
-      <span className="text-ink-5">sync {lastSyncLabel()}</span>
+      <span className="text-ink-5 hidden md:inline shrink-0">sync {lastSyncLabel()}</span>
       <button
         onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true, bubbles: true }))}
-        className="inline-flex items-center gap-1 text-ink-4 hover:text-accent transition"
+        className="hidden sm:inline-flex items-center gap-1 text-ink-4 hover:text-accent transition shrink-0"
         title="Open command palette"
       >
         <kbd className="bg-white/[0.04] border border-white/[0.06] rounded px-1 py-px font-mono">⌘K</kbd>

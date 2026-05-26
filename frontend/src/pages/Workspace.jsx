@@ -590,14 +590,14 @@ function CenterColumn() {
 
 export default function Workspace() {
   return (
-    <div className="h-full flex gap-2 p-2">
-      <div className="w-56 shrink-0">
+    <div className="lg:h-full flex flex-col lg:flex-row gap-2 p-2">
+      <div className="lg:w-56 shrink-0 h-64 lg:h-auto">
         <WatchlistColumn />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 min-h-[400px] lg:min-h-0">
         <CenterColumn />
       </div>
-      <div className="w-72 shrink-0">
+      <div className="lg:w-72 shrink-0">
         <OrderTicket />
       </div>
     </div>

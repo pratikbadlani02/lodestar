@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, X, Clock, ArrowUpRight, ArrowDownRight, Sun, Moon, Rows3, Rows2, Rows4 } from 'lucide-react'
+import { Search, X, Clock, ArrowUpRight, ArrowDownRight, Sun, Moon, Rows3, Rows2, Rows4, Menu } from 'lucide-react'
 import { useSymbol } from '../lib/SymbolContext'
 import { useTheme } from '../lib/ThemeContext'
 import { useDensity } from '../lib/DensityContext'
@@ -17,7 +17,7 @@ function useClickOutside(ref, onOutside) {
   }, [ref, onOutside])
 }
 
-export default function TopBar() {
+export default function TopBar({ onMenuOpen }) {
   const navigate = useNavigate()
   const { symbol, setSymbol, recents, removeRecent } = useSymbol()
   const { theme, toggle: toggleTheme } = useTheme()
@@ -78,7 +78,17 @@ export default function TopBar() {
   const up = (snap?.change ?? 0) >= 0
 
   return (
-    <div className="h-14 glass flex items-center gap-3 px-4 shrink-0 sticky top-0 z-30">
+    <div className="h-14 glass flex items-center gap-2 md:gap-3 px-2 md:px-4 shrink-0 sticky top-0 z-30">
+      {/* Hamburger — mobile only */}
+      {onMenuOpen && (
+        <button
+          onClick={onMenuOpen}
+          aria-label="Open navigation"
+          className="md:hidden w-9 h-9 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-ink-2 flex items-center justify-center shrink-0"
+        >
+          <Menu size={16} />
+        </button>
+      )}
       {/* Symbol search */}
       <div ref={wrapRef} className="relative">
         <form onSubmit={onSubmit}
@@ -88,8 +98,8 @@ export default function TopBar() {
             value={input}
             onFocus={() => setOpen(true)}
             onChange={(e) => setInput(e.target.value.toUpperCase())}
-            placeholder="Search ticker…"
-            className="bg-transparent outline-none text-xs font-mono uppercase w-32 placeholder:text-ink-5 placeholder:normal-case tracking-wide"
+            placeholder="Search…"
+            className="bg-transparent outline-none text-xs font-mono uppercase w-20 sm:w-32 placeholder:text-ink-5 placeholder:normal-case tracking-wide"
           />
           <kbd className="hidden sm:inline-block text-[10px] text-ink-5 bg-white/[0.04] border border-white/[0.06] rounded px-1 py-0.5 font-mono">⏎</kbd>
         </form>
@@ -120,7 +130,7 @@ export default function TopBar() {
       {/* Active symbol chip + price — visually grouped */}
       <button
         onClick={() => navigate(`/analysis/${symbol}`)}
-        className="group flex items-baseline gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition"
+        className="group hidden sm:flex items-baseline gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition"
         title="Open analysis"
       >
         <span className="font-display font-semibold text-sm text-ink-1 group-hover:text-brand transition-colors">{symbol}</span>
@@ -178,7 +188,7 @@ export default function TopBar() {
       <button
         onClick={cycleDensity}
         title={`Density: ${density} (click to cycle)`}
-        className="w-9 h-9 rounded-lg bg-white/[0.04] hover:bg-accent/15 border border-white/[0.06] hover:border-accent/30 text-ink-3 hover:text-accent flex items-center justify-center transition"
+        className="ml-auto md:ml-0 w-9 h-9 rounded-lg bg-white/[0.04] hover:bg-accent/15 border border-white/[0.06] hover:border-accent/30 text-ink-3 hover:text-accent flex items-center justify-center transition shrink-0"
       >
         {density === 'compact'
           ? <Rows4 size={14} />

@@ -187,7 +187,7 @@ export default function Insiders() {
     data?.major
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
       <SymbolHeader activePage="insiders" />
 
       {error && (
@@ -279,7 +279,7 @@ export default function Insiders() {
                     </BarChart>
                   </ResponsiveContainer>
                   {flowSummary && (
-                    <div className="grid grid-cols-4 gap-2 mt-3 text-2xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-2xs">
                       <FlowStat label="Buys" tone="text-up"
                         value={fmtBig(flowSummary.buyShares)}
                         sub={`$${fmtBig(flowSummary.buyValue)}`} />

@@ -286,7 +286,7 @@ export function TabStrip({ tabs, active, onChange }) {
 // ── PageShell / PageHeader ───────────────────────────────────────
 // Wraps every page in consistent padding + max-width + spacing.
 export function PageShell({ className = '', children, padded = true, fluid = false }) {
-  const padding = padded ? 'p-6' : ''
+  const padding = padded ? 'p-3 sm:p-4 md:p-6' : ''
   const width = fluid ? '' : 'max-w-[1600px] mx-auto'
   return <div className={`${padding} ${width} ${className}`}>{children}</div>
 }
@@ -295,9 +295,9 @@ export function PageShell({ className = '', children, padded = true, fluid = fal
 // Use this on every page for consistent vertical rhythm and chrome.
 export function PageHeader({ icon: Icon, title, subtitle, breadcrumbs, actions, badge, className = '' }) {
   return (
-    <div className={`mb-6 ${className}`}>
+    <div className={`mb-4 md:mb-6 ${className}`}>
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="flex items-center gap-1.5 text-2xs text-ink-4 mb-2">
+        <nav className="flex items-center gap-1.5 text-2xs text-ink-4 mb-2 flex-wrap">
           {breadcrumbs.map((b, i) => (
             <span key={i} className="flex items-center gap-1.5">
               {i > 0 && <span className="text-ink-5">/</span>}
@@ -310,22 +310,22 @@ export function PageHeader({ icon: Icon, title, subtitle, breadcrumbs, actions, 
           ))}
         </nav>
       )}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-start gap-3 min-w-0">
+      <div className="flex items-start justify-between gap-3 md:gap-4 flex-wrap">
+        <div className="flex items-start gap-2 md:gap-3 min-w-0 flex-1">
           {Icon && (
-            <span className="shrink-0 mt-0.5 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] text-accent">
-              <Icon size={16} />
+            <span className="shrink-0 mt-0.5 inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] text-accent">
+              <Icon size={15} />
             </span>
           )}
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="font-display text-xl font-semibold text-ink-1 leading-tight">{title}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-display text-lg md:text-xl font-semibold text-ink-1 leading-tight">{title}</h1>
               {badge}
             </div>
-            {subtitle && <p className="text-sm text-ink-3 mt-1 leading-relaxed">{subtitle}</p>}
+            {subtitle && <p className="text-xs md:text-sm text-ink-3 mt-1 leading-relaxed">{subtitle}</p>}
           </div>
         </div>
-        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+        {actions && <div className="flex items-center gap-2 shrink-0 flex-wrap">{actions}</div>}
       </div>
     </div>
   )

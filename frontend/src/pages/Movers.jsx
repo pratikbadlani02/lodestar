@@ -125,7 +125,7 @@ export default function Movers() {
   const maxVolume = useMemo(() => Math.max(1, ...actives.map((a) => Number(a.volume || 0))), [actives])
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Activity size={20} className="text-accent" />
@@ -141,7 +141,7 @@ export default function Movers() {
       </div>
 
       {/* Quick stats strip */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-3">
           <div className="text-2xs uppercase tracking-wider text-ink-4 font-medium">Best Gainer</div>
           {bestGainer ? (

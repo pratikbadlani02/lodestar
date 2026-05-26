@@ -525,7 +525,7 @@ export default function Analysis() {
   const ringProgress = ringCircum * (1 - (Math.max(0, Math.min(100, score.overall || 0)) / 100))
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
       {/* Page header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate(-1)}

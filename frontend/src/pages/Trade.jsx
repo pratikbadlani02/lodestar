@@ -214,10 +214,10 @@ export default function Trade({ isPaper = false }) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full overflow-hidden bg-surf-0">
+    <div className="flex flex-col lg:flex-row lg:h-full lg:overflow-hidden bg-surf-0">
 
       {/* ── LEFT PANEL: Symbol list ─────────────────────────────────────────── */}
-      <aside className="w-72 shrink-0 flex flex-col border-r border-surf-2">
+      <aside className="lg:w-72 shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r border-surf-2 max-h-72 lg:max-h-none">
         {/* Watchlist selector */}
         <div className="px-3 py-2 border-b border-surf-2">
           <select
@@ -264,7 +264,7 @@ export default function Trade({ isPaper = false }) {
       </aside>
 
       {/* ── CENTER PANEL: Chart ─────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 min-h-[500px] lg:min-h-0 lg:overflow-hidden">
         {/* Symbol info bar */}
         <div className="px-4 py-2 border-b border-surf-2 flex items-center gap-3 bg-surf-1/40 shrink-0">
           <span className="font-mono font-bold text-lg">{selectedSymbol || '—'}</span>
@@ -294,7 +294,7 @@ export default function Trade({ isPaper = false }) {
       </main>
 
       {/* ── RIGHT PANEL: Order entry + account + positions + orders ────────── */}
-      <aside className="w-80 shrink-0 flex flex-col border-l border-surf-2 overflow-y-auto">
+      <aside className="lg:w-80 shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l border-surf-2 lg:overflow-y-auto">
 
         {/* Paper trading banner — very top */}
         {isPaper && (

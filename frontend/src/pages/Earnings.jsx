@@ -153,7 +153,7 @@ export default function Earnings() {
   }, [filtered])
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Calendar size={20} className="text-accent" />

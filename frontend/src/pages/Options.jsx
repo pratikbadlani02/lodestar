@@ -151,7 +151,7 @@ export default function Options() {
   const pcOITone  = totals.pcOI  == null ? 'text-ink-1' : totals.pcOI  > 1.0 ? 'text-down' : totals.pcOI  < 0.7 ? 'text-up' : 'text-ink-1'
 
   return (
-    <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
       <SymbolHeader activePage="options" />
 
       {/* Expiry picker + key chip stats */}
