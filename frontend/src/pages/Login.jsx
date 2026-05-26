@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Activity, Lock } from 'lucide-react'
 import { api } from '../lib/api'
 import { Button, Input, FormField, Alert } from '../components/ui/primitives'
 
 export default function Login() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const from = params.get('from') || '/workspace'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState(null)
@@ -16,7 +18,9 @@ export default function Login() {
     setErr(null); setLoading(true)
     try {
       await api.login(username, password)
-      navigate('/')
+      // Avoid open-redirect: only honour same-origin relative paths.
+      const target = from.startsWith('/') && !from.startsWith('//') ? from : '/workspace'
+      navigate(target, { replace: true })
     } catch (e2) {
       setErr(e2.message || 'Login failed')
     } finally {
@@ -87,7 +91,9 @@ export default function Login() {
         </div>
 
         <p className="text-2xs text-ink-4 text-center mt-6 leading-relaxed">
-          Default credentials in <span className="font-mono">.env</span> — change before production use.
+          Market data is{' '}
+          <Link to="/" className="underline hover:text-ink-2">available without sign-in</Link>.
+          Sign in for trading, strategies, and account features.
         </p>
       </form>
     </div>

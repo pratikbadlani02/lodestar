@@ -5,9 +5,9 @@ import { SkeletonRows } from './components/ui/primitives'
 
 // Eager — small + needed first
 import Login from './pages/Login'
-import Workspace from './pages/Workspace'
 
 // Lazy — every other route gets its own chunk
+const Workspace         = lazy(() => import('./pages/Workspace'))
 const Strategies        = lazy(() => import('./pages/Strategies'))
 const Backtests         = lazy(() => import('./pages/Backtests'))
 const BacktestDetail    = lazy(() => import('./pages/BacktestDetail'))
@@ -40,11 +40,25 @@ const Insiders          = lazy(() => import('./pages/Insiders'))
 const Compare           = lazy(() => import('./pages/Compare'))
 const Analysis          = lazy(() => import('./pages/Analysis'))
 
+// Gate that only allows render if a token is present in sessionStorage.
+// Used to wrap private routes inside the otherwise-public Layout.
 function RequireAuth({ children }) {
   const token = sessionStorage.getItem('quant_token')
   const location = useLocation()
-  if (!token) return <Navigate to="/login" state={{ from: location }} replace />
+  if (!token) {
+    // Preserve where the user was trying to go so Login can send them back.
+    const from = location.pathname + (location.search || '')
+    return <Navigate to={`/login?from=${encodeURIComponent(from)}`} replace />
+  }
   return children
+}
+
+function S({ children }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+}
+
+function Private({ children }) {
+  return <RequireAuth>{children}</RequireAuth>
 }
 
 // Route-level fallback while a chunk is loading
@@ -66,48 +80,60 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
-        <Route index element={<Workspace />} />
-        <Route path="dashboard" element={<Navigate to="/" replace />} />
-        <Route path="strategies"        element={<Suspense fallback={<RouteFallback />}><Strategies /></Suspense>} />
-        <Route path="backtests"         element={<Suspense fallback={<RouteFallback />}><Backtests /></Suspense>} />
-        <Route path="backtests/:id"     element={<Suspense fallback={<RouteFallback />}><BacktestDetail /></Suspense>} />
-        <Route path="backtest-compare"  element={<Suspense fallback={<RouteFallback />}><BacktestCompare /></Suspense>} />
-        <Route path="optimizer"         element={<Suspense fallback={<RouteFallback />}><Optimizer /></Suspense>} />
-        <Route path="optimizer/:id"     element={<Suspense fallback={<RouteFallback />}><OptimizerDetail /></Suspense>} />
-        <Route path="orders"            element={<Suspense fallback={<RouteFallback />}><Orders /></Suspense>} />
-        <Route path="positions"         element={<Suspense fallback={<RouteFallback />}><Positions /></Suspense>} />
-        <Route path="risk"              element={<Suspense fallback={<RouteFallback />}><RiskAnalytics /></Suspense>} />
-        <Route path="alerts"            element={<Suspense fallback={<RouteFallback />}><Alerts /></Suspense>} />
-        <Route path="audit"             element={<Suspense fallback={<RouteFallback />}><AuditLog /></Suspense>} />
-        <Route path="settings"          element={<Suspense fallback={<RouteFallback />}><Settings /></Suspense>} />
-        <Route path="watchlists"        element={<Suspense fallback={<RouteFallback />}><Watchlists /></Suspense>} />
-        <Route path="market"            element={<Suspense fallback={<RouteFallback />}><Market /></Suspense>} />
-        <Route path="market/region/:id" element={<Suspense fallback={<RouteFallback />}><Market /></Suspense>} />
-        <Route path="price-alerts"      element={<Suspense fallback={<RouteFallback />}><PriceAlerts /></Suspense>} />
-        <Route path="users"             element={<Suspense fallback={<RouteFallback />}><Users /></Suspense>} />
-        <Route path="stocks"            element={<Suspense fallback={<RouteFallback />}><Stocks /></Suspense>} />
-        <Route path="screener"          element={<Suspense fallback={<RouteFallback />}><Screener /></Suspense>} />
-        <Route path="trade"             element={<Suspense fallback={<RouteFallback />}><Trade /></Suspense>} />
-        <Route path="paper"             element={<Suspense fallback={<RouteFallback />}><Paper /></Suspense>} />
-        <Route path="options"           element={<Suspense fallback={<RouteFallback />}><Options /></Suspense>} />
-        <Route path="options/:symbol"   element={<Suspense fallback={<RouteFallback />}><Options /></Suspense>} />
-        <Route path="fundamentals"           element={<Suspense fallback={<RouteFallback />}><Fundamentals /></Suspense>} />
-        <Route path="fundamentals/:symbol"   element={<Suspense fallback={<RouteFallback />}><Fundamentals /></Suspense>} />
-        <Route path="earnings"          element={<Suspense fallback={<RouteFallback />}><Earnings /></Suspense>} />
-        <Route path="heatmap"           element={<Suspense fallback={<RouteFallback />}><Heatmap /></Suspense>} />
-        <Route path="tape"              element={<Suspense fallback={<RouteFallback />}><Tape /></Suspense>} />
-        <Route path="tape/:symbol"      element={<Suspense fallback={<RouteFallback />}><Tape /></Suspense>} />
-        <Route path="movers"            element={<Suspense fallback={<RouteFallback />}><Movers /></Suspense>} />
-        <Route path="crypto"            element={<Suspense fallback={<RouteFallback />}><Crypto /></Suspense>} />
-        <Route path="dividends"           element={<Suspense fallback={<RouteFallback />}><Dividends /></Suspense>} />
-        <Route path="dividends/:symbol"   element={<Suspense fallback={<RouteFallback />}><Dividends /></Suspense>} />
-        <Route path="insiders"            element={<Suspense fallback={<RouteFallback />}><Insiders /></Suspense>} />
-        <Route path="insiders/:symbol"    element={<Suspense fallback={<RouteFallback />}><Insiders /></Suspense>} />
-        <Route path="compare"             element={<Suspense fallback={<RouteFallback />}><Compare /></Suspense>} />
-        <Route path="analysis"            element={<Suspense fallback={<RouteFallback />}><Analysis /></Suspense>} />
-        <Route path="analysis/:symbol"    element={<Suspense fallback={<RouteFallback />}><Analysis /></Suspense>} />
+
+      {/* Layout is unauthenticated — anonymous users see the public pages.
+          Private pages are individually wrapped in <Private>. */}
+      <Route path="/" element={<Layout />}>
+        {/* Public landing: market overview */}
+        <Route index                          element={<S><Market /></S>} />
+        <Route path="market"                  element={<S><Market /></S>} />
+        <Route path="market/region/:id"       element={<S><Market /></S>} />
+
+        {/* Public market data */}
+        <Route path="stocks"                  element={<S><Stocks /></S>} />
+        <Route path="screener"                element={<S><Screener /></S>} />
+        <Route path="heatmap"                 element={<S><Heatmap /></S>} />
+        <Route path="movers"                  element={<S><Movers /></S>} />
+        <Route path="tape"                    element={<S><Tape /></S>} />
+        <Route path="tape/:symbol"            element={<S><Tape /></S>} />
+        <Route path="crypto"                  element={<S><Crypto /></S>} />
+
+        {/* Public research */}
+        <Route path="analysis"                element={<S><Analysis /></S>} />
+        <Route path="analysis/:symbol"        element={<S><Analysis /></S>} />
+        <Route path="fundamentals"            element={<S><Fundamentals /></S>} />
+        <Route path="fundamentals/:symbol"    element={<S><Fundamentals /></S>} />
+        <Route path="options"                 element={<S><Options /></S>} />
+        <Route path="options/:symbol"         element={<S><Options /></S>} />
+        <Route path="earnings"                element={<S><Earnings /></S>} />
+        <Route path="dividends"               element={<S><Dividends /></S>} />
+        <Route path="dividends/:symbol"       element={<S><Dividends /></S>} />
+        <Route path="insiders"                element={<S><Insiders /></S>} />
+        <Route path="insiders/:symbol"        element={<S><Insiders /></S>} />
+        <Route path="compare"                 element={<S><Compare /></S>} />
+
+        {/* Private — login required */}
+        <Route path="workspace"               element={<Private><S><Workspace /></S></Private>} />
+        <Route path="dashboard"               element={<Navigate to="/workspace" replace />} />
+        <Route path="trade"                   element={<Private><S><Trade /></S></Private>} />
+        <Route path="paper"                   element={<Private><S><Paper /></S></Private>} />
+        <Route path="orders"                  element={<Private><S><Orders /></S></Private>} />
+        <Route path="positions"               element={<Private><S><Positions /></S></Private>} />
+        <Route path="watchlists"              element={<Private><S><Watchlists /></S></Private>} />
+        <Route path="strategies"              element={<Private><S><Strategies /></S></Private>} />
+        <Route path="backtests"               element={<Private><S><Backtests /></S></Private>} />
+        <Route path="backtests/:id"           element={<Private><S><BacktestDetail /></S></Private>} />
+        <Route path="backtest-compare"        element={<Private><S><BacktestCompare /></S></Private>} />
+        <Route path="optimizer"               element={<Private><S><Optimizer /></S></Private>} />
+        <Route path="optimizer/:id"           element={<Private><S><OptimizerDetail /></S></Private>} />
+        <Route path="risk"                    element={<Private><S><RiskAnalytics /></S></Private>} />
+        <Route path="alerts"                  element={<Private><S><Alerts /></S></Private>} />
+        <Route path="price-alerts"            element={<Private><S><PriceAlerts /></S></Private>} />
+        <Route path="audit"                   element={<Private><S><AuditLog /></S></Private>} />
+        <Route path="settings"                element={<Private><S><Settings /></S></Private>} />
+        <Route path="users"                   element={<Private><S><Users /></S></Private>} />
       </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

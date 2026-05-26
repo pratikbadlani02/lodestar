@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import {
   Bot, BarChart3, ListOrdered, Briefcase,
-  ShieldAlert, Settings, LogOut, Activity, AlertTriangle,
+  ShieldAlert, Settings, LogOut, LogIn, Lock, Activity, AlertTriangle,
   Sparkles, Bell, Shield, GitCompare, Star, Newspaper, BellRing, Users,
   TrendingUp, Filter, Zap, FlaskConical,
   Layers, Building2, Calendar, LayoutGrid,
@@ -25,23 +25,13 @@ import ErrorBoundary from './ErrorBoundary'
 const SIDEBAR_COLLAPSED_KEY = 'quant_sidebar_collapsed_v1'
 const NAV_GROUPS_COLLAPSED_KEY = 'quant_nav_groups_collapsed_v1'
 
-// ── Sidebar IA — grouped by user mental model ──────────────────────
-// Trade   → things you do (act on the market)
-// Markets → things you watch (broad market state)
-// Research→ things you study (single-symbol deep dives)
-// Strategy→ things you automate (backtest/optimize/run)
-// Risk    → things that protect you (limits/alerts/audit)
-// Admin   → things that configure (settings/users)
+// Sidebar nav. `priv: true` means the route requires login — the click still
+// works (RequireAuth in App.jsx will redirect to /login?from=...) but we tag
+// the item visually for anonymous users so it's clear what's gated.
 const NAV_GROUPS = [
   { id: 'pinned', label: null, items: [
-    { to: '/',            icon: LayoutGrid,   label: 'Workspace',    end: true },
-  ]},
-  { id: 'trade', label: 'Trade', items: [
-    { to: '/trade',       icon: Zap,          label: 'Quick Trade'             },
-    { to: '/paper',       icon: FlaskConical, label: 'Paper Trade'             },
-    { to: '/orders',      icon: ListOrdered,  label: 'Orders'                  },
-    { to: '/positions',   icon: Briefcase,    label: 'Positions'               },
-    { to: '/watchlists',  icon: Star,         label: 'Watchlists'              },
+    { to: '/',            icon: LayoutGrid,   label: 'Market',       end: true },
+    { to: '/workspace',   icon: Activity,     label: 'Workspace',    priv: true },
   ]},
   { id: 'markets', label: 'Markets', items: [
     { to: '/stocks',      icon: TrendingUp,   label: 'Stocks'                  },
@@ -61,21 +51,28 @@ const NAV_GROUPS = [
     { to: '/insiders',    icon: Users,        label: 'Insiders'                },
     { to: '/compare',     icon: GitCompare,   label: 'Compare Symbols'         },
   ]},
+  { id: 'trade', label: 'Trade', items: [
+    { to: '/trade',       icon: Zap,          label: 'Quick Trade',  priv: true },
+    { to: '/paper',       icon: FlaskConical, label: 'Paper Trade',  priv: true },
+    { to: '/orders',      icon: ListOrdered,  label: 'Orders',       priv: true },
+    { to: '/positions',   icon: Briefcase,    label: 'Positions',    priv: true },
+    { to: '/watchlists',  icon: Star,         label: 'Watchlists',   priv: true },
+  ]},
   { id: 'strategy', label: 'Strategy', items: [
-    { to: '/strategies',  icon: Bot,          label: 'Strategies'              },
-    { to: '/backtests',   icon: BarChart3,    label: 'Backtests'               },
-    { to: '/backtest-compare', icon: GitCompare, label: 'Compare Backtests'    },
-    { to: '/optimizer',   icon: Sparkles,     label: 'Optimizer'               },
+    { to: '/strategies',  icon: Bot,          label: 'Strategies',       priv: true },
+    { to: '/backtests',   icon: BarChart3,    label: 'Backtests',        priv: true },
+    { to: '/backtest-compare', icon: GitCompare, label: 'Compare Backtests', priv: true },
+    { to: '/optimizer',   icon: Sparkles,     label: 'Optimizer',        priv: true },
   ]},
   { id: 'risk', label: 'Risk & Alerts', items: [
-    { to: '/risk',        icon: Shield,       label: 'Risk Analytics'          },
-    { to: '/alerts',      icon: Bell,         label: 'System Alerts', badgeKey: 'alerts' },
-    { to: '/price-alerts',icon: BellRing,     label: 'Price Alerts'            },
-    { to: '/audit',       icon: ShieldAlert,  label: 'Audit Log'               },
+    { to: '/risk',        icon: Shield,       label: 'Risk Analytics',   priv: true },
+    { to: '/alerts',      icon: Bell,         label: 'System Alerts',    priv: true, badgeKey: 'alerts' },
+    { to: '/price-alerts',icon: BellRing,     label: 'Price Alerts',     priv: true },
+    { to: '/audit',       icon: ShieldAlert,  label: 'Audit Log',        priv: true },
   ]},
   { id: 'admin', label: 'Admin', items: [
-    { to: '/settings',    icon: Settings,     label: 'Settings'                },
-    { to: '/users',       icon: Users,        label: 'Users'                   },
+    { to: '/settings',    icon: Settings,     label: 'Settings',     priv: true },
+    { to: '/users',       icon: Users,        label: 'Users',        priv: true },
   ]},
 ]
 
@@ -85,6 +82,9 @@ function loadCollapsed() {
 function loadGroupCollapsed() {
   try { return JSON.parse(localStorage.getItem(NAV_GROUPS_COLLAPSED_KEY) || '{}') } catch { return {} }
 }
+function hasToken() {
+  try { return !!sessionStorage.getItem('quant_token') } catch { return false }
+}
 
 export default function Layout() {
   const navigate = useNavigate()
@@ -93,32 +93,42 @@ export default function Layout() {
   const unackCount = useStore(selectUnackCount)
   const [collapsed, setCollapsed] = useState(loadCollapsed)
   const [groupCollapsed, setGroupCollapsed] = useState(loadGroupCollapsed)
+  const [authed, setAuthed] = useState(hasToken)
 
-  // Boot the global store + WS on first authenticated mount. The init helper
-  // is idempotent so re-mounts during HMR don't double-subscribe.
-  useEffect(() => { initStoreWS(); installHotkeys() }, [])
+  // Boot the global store + WS only after auth. Anonymous users don't fetch
+  // any private state. Re-check after navigation in case Login just ran.
+  useEffect(() => {
+    installHotkeys()
+    if (authed) initStoreWS()
+  }, [authed])
 
-  // ── Global trader hotkeys ───────────────────────────────────
-  // `/`  → focus the symbol search at the top
-  // `?`  → open the shortcut help overlay
-  // g w  → jump to workspace, g p → positions, g o → orders, etc.
-  useHotkey('/', (e) => {
+  // Keep `authed` in sync with sessionStorage across tabs / login flow.
+  useEffect(() => {
+    function check() { setAuthed(hasToken()) }
+    window.addEventListener('storage', check)
+    window.addEventListener('focus', check)
+    return () => {
+      window.removeEventListener('storage', check)
+      window.removeEventListener('focus', check)
+    }
+  }, [])
+
+  useHotkey('/', () => {
     const input = document.querySelector('input[placeholder*="ticker" i], input[placeholder*="search" i]')
     if (input) { input.focus(); input.select?.() }
   })
   useHotkey('shift+?', () => window.dispatchEvent(new CustomEvent('shortcut-help:open')))
-  useHotkey('g w', () => navigate('/'))
+  useHotkey('g m', () => navigate('/'))
+  useHotkey('g s', () => navigate('/stocks'))
+  useHotkey('g c', () => navigate('/screener'))
+  useHotkey('g h', () => navigate('/heatmap'))
+  useHotkey('g a', () => navigate('/analysis'))
   useHotkey('g p', () => navigate('/positions'))
   useHotkey('g o', () => navigate('/orders'))
-  useHotkey('g s', () => navigate('/strategies'))
-  useHotkey('g a', () => navigate('/alerts'))
-  useHotkey('g r', () => navigate('/risk'))
-  useHotkey('g c', () => navigate('/screener'))
   useHotkey('g t', () => navigate('/trade'))
 
-  // Pass `refresh` through Outlet context for legacy callers — eventually
-  // every page should subscribe to the store directly.
   const refresh = () => {
+    if (!authed) return
     const s = useStore.getState()
     s.loadControl(); s.loadHealth(); s.loadAccount(); s.loadPositions(); s.loadOrders(); s.loadAlerts()
   }
@@ -130,20 +140,25 @@ export default function Layout() {
     try { localStorage.setItem(NAV_GROUPS_COLLAPSED_KEY, JSON.stringify(groupCollapsed)) } catch {}
   }, [groupCollapsed])
 
-  function logout() { api.logout(); navigate('/login') }
+  function logout() {
+    api.logout()
+    setAuthed(false)
+    navigate('/')
+  }
+  function signIn() {
+    navigate('/login')
+  }
   function toggleGroup(id) { setGroupCollapsed((g) => ({ ...g, [id]: !g[id] })) }
 
-  const isLive = control?.is_live
-  const tradingOn = control?.trading_enabled
-  const strategiesOn = control?.strategies_enabled
-
+  const isLive       = authed && control?.is_live
+  const tradingOn    = authed && control?.trading_enabled
+  const strategiesOn = authed && control?.strategies_enabled
   const badges = { alerts: unackCount }
 
   return (
     <div className="flex flex-col h-screen bg-surf-0">
      <div className="flex-1 flex min-h-0">
       <aside className={`${collapsed ? 'w-14' : 'w-56'} bg-surf-1/80 backdrop-blur-xl border-r border-white/[0.06] flex flex-col relative transition-[width] duration-200`}>
-        {/* Subtle vertical accent line on the right edge */}
         <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-accent/20 to-transparent" />
 
         {/* Brand mark + collapse toggle */}
@@ -158,8 +173,10 @@ export default function Layout() {
             {!collapsed && (
               <div className="min-w-0 flex-1">
                 <div className="font-display font-semibold text-sm leading-tight text-ink-1">Lodestar</div>
-                <div className={`text-2xs font-mono font-medium tracking-[0.16em] ${isLive ? 'text-down' : 'text-up'}`}>
-                  {isLive ? 'LIVE' : 'PAPER'}
+                <div className={`text-2xs font-mono font-medium tracking-[0.16em] ${
+                  !authed ? 'text-ink-4' : (isLive ? 'text-down' : 'text-up')
+                }`}>
+                  {!authed ? 'PUBLIC' : (isLive ? 'LIVE' : 'PAPER')}
                 </div>
               </div>
             )}
@@ -173,7 +190,7 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Nav — grouped, collapsible */}
+        {/* Nav */}
         <nav className={`flex-1 ${collapsed ? 'px-1.5' : 'px-2'} py-2 overflow-y-auto`}>
           {NAV_GROUPS.map((group) => {
             const groupIsCollapsed = !collapsed && groupCollapsed[group.id]
@@ -194,16 +211,19 @@ export default function Layout() {
                 {!groupIsCollapsed && (
                   <div className="space-y-0.5">
                     {group.items.map((item) => {
-                      const { to, icon: Icon, label, end, badgeKey } = item
+                      const { to, icon: Icon, label, end, badgeKey, priv } = item
                       const badge = badgeKey ? badges[badgeKey] : 0
+                      const gated = priv && !authed
                       return (
                         <NavLink key={to} to={to} end={end}
-                          title={collapsed ? label : undefined}
+                          title={collapsed ? (gated ? `${label} — sign in required` : label) : undefined}
                           className={({ isActive }) =>
                             `group relative flex items-center gap-2.5 ${collapsed ? 'justify-center px-1.5 py-2' : 'px-2.5 py-1.5'} rounded-lg text-xs transition-all ${
                               isActive
                                 ? 'bg-white/[0.06] text-ink-1'
-                                : 'text-ink-3 hover:bg-white/[0.03] hover:text-ink-1'
+                                : gated
+                                  ? 'text-ink-4 hover:bg-white/[0.03] hover:text-ink-2'
+                                  : 'text-ink-3 hover:bg-white/[0.03] hover:text-ink-1'
                             }`
                           }>
                           {({ isActive }) => (
@@ -213,6 +233,9 @@ export default function Layout() {
                               )}
                               <Icon size={14} className={isActive ? 'text-accent' : ''} />
                               {!collapsed && <span className="flex-1 font-medium truncate">{label}</span>}
+                              {!collapsed && gated && (
+                                <Lock size={10} className="text-ink-5 shrink-0" />
+                              )}
                               {!collapsed && badge > 0 && (
                                 <span className="bg-down/90 text-[#fff] text-2xs font-semibold rounded-full px-1.5 min-w-[18px] text-center shadow-glow-down">
                                   {badge}
@@ -233,9 +256,9 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* Status block */}
+        {/* Status block (auth-only) + sign in/out button */}
         <div className={`${collapsed ? 'px-1.5' : 'px-3'} py-3 border-t border-white/[0.06] space-y-2`}>
-          {!collapsed && (
+          {authed && !collapsed && (
             <>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-white/[0.025] rounded-lg p-2 border border-white/[0.04]">
@@ -263,26 +286,39 @@ export default function Layout() {
               )}
             </>
           )}
-          {collapsed && (
+          {authed && collapsed && (
             <div className="flex flex-col items-center gap-1.5 py-1" title={`Trading ${tradingOn ? 'ON' : 'OFF'} · Strategies ${strategiesOn ? 'ON' : 'OFF'}`}>
               <span className={`w-2 h-2 rounded-full ${tradingOn ? 'bg-up shadow-glow-up' : 'bg-down'} soft-pulse`} />
               <span className={`w-2 h-2 rounded-full ${strategiesOn ? 'bg-up' : 'bg-warn'}`} />
             </div>
           )}
-          <button onClick={logout}
-            title="Logout"
-            className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2'} px-2.5 py-1.5 rounded-lg text-xs text-ink-3 hover:bg-white/[0.04] hover:text-ink-1 transition`}>
-            <LogOut size={12} />{!collapsed && 'Logout'}
-          </button>
+          {!authed && !collapsed && (
+            <p className="text-2xs leading-relaxed text-ink-5">
+              Sign in to access trading, strategies, and account features.
+            </p>
+          )}
+          {authed ? (
+            <button onClick={logout}
+              title="Logout"
+              className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2'} px-2.5 py-1.5 rounded-lg text-xs text-ink-3 hover:bg-white/[0.04] hover:text-ink-1 transition`}>
+              <LogOut size={12} />{!collapsed && 'Logout'}
+            </button>
+          ) : (
+            <button onClick={signIn}
+              title="Sign in"
+              className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2'} px-2.5 py-1.5 rounded-lg text-xs bg-up/10 text-up hover:bg-up/20 transition`}>
+              <LogIn size={12} />{!collapsed && 'Sign in'}
+            </button>
+          )}
         </div>
       </aside>
 
-      <WatchRail />
+      {authed && <WatchRail />}
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <TopBar />
         <Ticker />
-        {isLive && !tradingOn && (
+        {authed && isLive && !tradingOn && (
           <div className="bg-down/10 border-b border-down/25 px-4 py-2 text-xs text-down flex items-center gap-2 backdrop-blur-sm">
             <AlertTriangle size={12} />
             <span className="font-medium">Trading is HALTED.</span>
@@ -291,23 +327,20 @@ export default function Layout() {
         )}
         <div className="flex-1 overflow-auto">
           <ErrorBoundary>
-            <Outlet context={{ refresh, control, health }} />
+            <Outlet context={{ refresh, control, health, authed }} />
           </ErrorBoundary>
         </div>
       </main>
-
      </div>
-      <StatusBar control={control} health={health} />
-      <OrderSlideOver />
-      <CommandPalette />
+      <StatusBar control={control} health={health} authed={authed} />
+      {authed && <OrderSlideOver />}
+      <CommandPalette authed={authed} />
       <ShortcutHelp />
       <ToasterShell />
     </div>
   )
 }
 
-// Toaster bound to the current theme — sits below other portals so its
-// stacking context doesn't interfere with modals.
 function ToasterShell() {
   const { theme } = useTheme()
   return (

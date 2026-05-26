@@ -34,7 +34,7 @@ function getSession() {
 }
 
 // ── Component ──────────────────────────────────────────────────
-export default function StatusBar({ control, health }) {
+export default function StatusBar({ control, health, authed = false }) {
   const [clock, setClock] = useState(getNYParts())
   const [session, setSession] = useState(getSession())
   const [account, setAccount] = useState(null)
@@ -60,24 +60,31 @@ export default function StatusBar({ control, health }) {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
 
-  // Poll account + measure latency
+  // Latency + (when authed) account snapshot. For anonymous users we measure
+  // latency against the public /api/health probe instead.
   useEffect(() => {
     let cancelled = false
     async function tick() {
       const t0 = performance.now()
       try {
-        const a = await api.getAccount()
-        const ms = performance.now() - t0
-        if (cancelled) return
-        setAccount(a); setLatency(Math.round(ms)); setLastSync(Date.now())
+        if (authed) {
+          const a = await api.getAccount()
+          const ms = performance.now() - t0
+          if (cancelled) return
+          setAccount(a); setLatency(Math.round(ms)); setLastSync(Date.now())
+        } else {
+          await api.health()
+          if (cancelled) return
+          setAccount(null); setLatency(Math.round(performance.now() - t0)); setLastSync(Date.now())
+        }
       } catch {
-        if (!cancelled) { setLatency(null) }
+        if (!cancelled) setLatency(null)
       }
     }
     tick()
     const t = setInterval(tick, 15000)
     return () => { cancelled = true; clearInterval(t) }
-  }, [])
+  }, [authed])
 
   const equity = account ? Number(account.equity) : null
   const bp     = account ? Number(account.buying_power) : null

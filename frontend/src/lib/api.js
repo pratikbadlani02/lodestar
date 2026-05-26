@@ -17,8 +17,15 @@ async function request(method, path, body) {
 
   const res = await fetch(`${BASE}${path}`, { method, headers, body: payload })
   if (res.status === 401) {
-    setToken(null); window.location.href = '/login'
-    throw new Error('Session expired')
+    // Only force the user to /login if they had a token (i.e. their session
+    // expired mid-use). Anonymous callers hitting a private endpoint should
+    // just receive the 401 — pages can decide how to surface it.
+    if (token) {
+      setToken(null)
+      const here = window.location.pathname + window.location.search
+      window.location.href = `/login?from=${encodeURIComponent(here)}`
+    }
+    const err = new Error('unauthorized'); err.status = 401; throw err
   }
   if (!res.ok) {
     let detail; try { detail = await res.json() } catch { detail = await res.text() }
