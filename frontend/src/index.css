@@ -2,100 +2,104 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Dark theme (default) — trader-focused ─────────────────── */
+/* ── Dark theme (default) — Webull-inspired ────────────────── */
 :root,
 [data-theme="dark"] {
-  /* Semantic — clean, professional, less neon */
-  --c-up: 38 194 129;        /* emerald, slightly muted */
-  --c-up-soft: 22 163 113;
-  --c-down: 235 80 96;       /* red, slightly muted */
-  --c-down-soft: 211 60 76;
-  --c-warn: 245 158 11;
-  --c-warn-soft: 217 119 6;
-  --c-info: 56 189 248;
-  --c-info-soft: 2 132 199;
+  /* Semantic — vivid gain/loss like Webull's app */
+  --c-up: 0 200 5;           /* Webull green — vivid, slightly cool */
+  --c-up-soft: 5 165 30;
+  --c-down: 254 62 69;       /* Webull red — bright, slightly orange */
+  --c-down-soft: 215 50 58;
+  --c-warn: 255 159 28;      /* Webull amber */
+  --c-warn-soft: 220 130 12;
+  --c-info: 25 122 255;      /* shares the accent blue family */
+  --c-info-soft: 12 95 215;
 
-  /* Single cyan accent — used for interactive states only */
-  --c-accent: 34 211 238;
-  --c-accent-soft: 6 182 212;
-  --c-accent2: 38 194 129;   /* secondary = same emerald as up */
-  --c-accent2-soft: 22 163 113;
+  /* Primary accent: Webull blue */
+  --c-accent: 25 122 255;
+  --c-accent-soft: 12 95 215;
+  --c-accent2: 0 200 5;      /* secondary = gain green */
+  --c-accent2-soft: 5 165 30;
 
-  /* Brand gradient now uses ONE flat green→cyan ramp — trader feel */
-  --c-grad-a: 38 194 129;
-  --c-grad-b: 22 163 113;
-  --c-grad-c: 34 211 238;
+  /* Brand gradient — clean blue → green, no cyan filler */
+  --c-grad-a: 25 122 255;
+  --c-grad-b: 10 165 130;
+  --c-grad-c: 0 200 5;
 
-  /* Surface — cooler near-black navy, slightly more density */
-  --c-surf-0: 8 10 16;       /* app bg, near-black */
-  --c-surf-1: 14 17 24;      /* panel */
-  --c-surf-2: 20 24 33;      /* raised */
-  --c-surf-3: 29 34 44;      /* hover */
-  --c-surf-4: 42 49 62;
-  --c-surf-5: 60 70 86;
+  /* Surfaces — Webull's near-pure-black with cool gray steps */
+  --c-surf-0: 10 10 12;      /* app bg, near-black */
+  --c-surf-1: 22 22 26;      /* panel */
+  --c-surf-2: 30 30 35;      /* raised */
+  --c-surf-3: 42 42 48;      /* hover */
+  --c-surf-4: 62 62 70;
+  --c-surf-5: 92 92 100;
 
-  --c-ink-1: 232 240 252;
-  --c-ink-2: 186 198 215;
-  --c-ink-3: 136 150 172;
-  --c-ink-4: 96 110 130;
-  --c-ink-5: 65 76 92;
+  /* Ink — Webull's high-contrast white-to-gray ramp */
+  --c-ink-1: 255 255 255;
+  --c-ink-2: 200 202 208;
+  --c-ink-3: 158 160 168;
+  --c-ink-4: 118 120 128;
+  --c-ink-5: 78 80 88;
 
   --c-overlay: 255 255 255;
 
-  /* Subtle ambient wash — barely-there cyan/emerald */
-  --app-bg-a: rgba(34, 211, 238, 0.03);
-  --app-bg-b: rgba(38, 194, 129, 0.025);
+  /* Background wash — almost imperceptible blue tint */
+  --app-bg-a: rgba(25, 122, 255, 0.018);
+  --app-bg-b: rgba(0, 200, 5, 0.012);
 
-  --c-border-rgb: 136 150 172;
-  --c-border-alpha: 0.10;
-  --c-glass-bg: rgba(14, 17, 24, 0.78);
+  --c-border-rgb: 158 160 168;
+  --c-border-alpha: 0.08;
+  --c-glass-bg: rgba(15, 15, 18, 0.88);
 
   /* Row density — set per-table via data-density */
   --row-py: 6px;
   --row-px: 12px;
+
+  /* Webull-style card corner radius (sharper than before) */
+  --radius-card: 6px;
 }
 
-/* ── Light theme ──────────────────────────────────────────── */
+/* ── Light theme — Webull-inspired ─────────────────────────── */
 [data-theme="light"] {
-  --c-up: 22 163 113;
-  --c-up-soft: 21 128 92;
-  --c-down: 211 60 76;
-  --c-down-soft: 185 50 65;
-  --c-warn: 217 119 6;
-  --c-warn-soft: 180 83 9;
-  --c-info: 2 132 199;
-  --c-info-soft: 3 105 161;
+  --c-up: 5 165 30;          /* slightly deeper green for white bg legibility */
+  --c-up-soft: 4 135 25;
+  --c-down: 220 50 58;
+  --c-down-soft: 185 40 48;
+  --c-warn: 220 130 12;
+  --c-warn-soft: 180 105 10;
+  --c-info: 12 95 215;
+  --c-info-soft: 8 75 175;
 
-  --c-accent: 8 145 178;
-  --c-accent-soft: 14 116 144;
-  --c-accent2: 22 163 113;
-  --c-accent2-soft: 21 128 92;
+  --c-accent: 12 95 215;     /* deeper Webull blue on white */
+  --c-accent-soft: 8 75 175;
+  --c-accent2: 5 165 30;
+  --c-accent2-soft: 4 135 25;
 
-  --c-grad-a: 22 163 113;
-  --c-grad-b: 21 128 92;
-  --c-grad-c: 8 145 178;
+  --c-grad-a: 12 95 215;
+  --c-grad-b: 8 145 130;
+  --c-grad-c: 5 165 30;
 
-  --c-surf-0: 245 247 250;
+  --c-surf-0: 246 247 250;
   --c-surf-1: 255 255 255;
-  --c-surf-2: 241 244 248;
-  --c-surf-3: 226 232 240;
-  --c-surf-4: 203 213 225;
-  --c-surf-5: 148 163 184;
+  --c-surf-2: 240 242 246;
+  --c-surf-3: 226 230 236;
+  --c-surf-4: 200 206 215;
+  --c-surf-5: 146 152 165;
 
-  --c-ink-1: 15 23 42;
-  --c-ink-2: 51 65 85;
-  --c-ink-3: 71 85 105;
-  --c-ink-4: 100 116 139;
-  --c-ink-5: 148 163 184;
+  --c-ink-1: 17 17 19;
+  --c-ink-2: 55 58 65;
+  --c-ink-3: 90 95 105;
+  --c-ink-4: 130 135 145;
+  --c-ink-5: 175 180 190;
 
-  --c-overlay: 15 23 42;
+  --c-overlay: 17 17 19;
 
-  --app-bg-a: rgba(8, 145, 178, 0.03);
-  --app-bg-b: rgba(22, 163, 113, 0.025);
+  --app-bg-a: rgba(12, 95, 215, 0.02);
+  --app-bg-b: rgba(5, 165, 30, 0.015);
 
-  --c-border-rgb: 15 23 42;
-  --c-border-alpha: 0.10;
-  --c-glass-bg: rgba(255, 255, 255, 0.82);
+  --c-border-rgb: 17 17 19;
+  --c-border-alpha: 0.08;
+  --c-glass-bg: rgba(255, 255, 255, 0.88);
 }
 
 /* ── Density modes (applied at <html> or any subtree) ──────── */
@@ -158,23 +162,19 @@ input[type="number"],
   color: transparent;
 }
 
-/* Card preset — subtle gradient, soft border, inner highlight */
+/* Card preset — Webull-style flat panel with hairline border */
 .card-surface {
   background-color: rgb(var(--c-surf-1));
-  background-image: linear-gradient(180deg, rgba(var(--c-overlay) / 0.025) 0%, rgba(var(--c-overlay) / 0) 100%);
   border: 1px solid rgba(var(--c-border-rgb) / var(--c-border-alpha));
-  border-radius: 14px;
-  box-shadow:
-    0 1px 0 0 rgba(var(--c-overlay) / 0.04) inset,
-    0 4px 24px -8px rgba(0,0,0,0.18);
+  border-radius: 6px;
+  box-shadow: none;
 }
 [data-theme="light"] .card-surface {
-  box-shadow:
-    0 1px 0 0 rgba(255,255,255,0.6) inset,
-    0 4px 14px -8px rgba(15,23,42,0.10);
+  box-shadow: 0 1px 2px 0 rgba(17, 17, 19, 0.04);
 }
 .card-surface-hover:hover {
-  border-color: rgba(var(--c-border-rgb) / calc(var(--c-border-alpha) * 1.8));
+  border-color: rgba(var(--c-border-rgb) / calc(var(--c-border-alpha) * 2));
+  background-color: rgb(var(--c-surf-2));
 }
 
 /* Dense table — now density-driven */
@@ -231,8 +231,8 @@ input[type="number"] { -moz-appearance: textfield; }
 .soft-pulse { animation: soft-pulse 2.4s ease-in-out infinite; }
 
 *:focus-visible {
-  outline: 2px solid rgba(var(--c-accent) / 0.45);
+  outline: 2px solid rgba(var(--c-accent) / 0.55);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 4px;
 }
-::selection { background: rgba(var(--c-accent) / 0.35); color: #fff; }
+::selection { background: rgba(var(--c-accent) / 0.40); color: #fff; }

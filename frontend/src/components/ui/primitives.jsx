@@ -313,7 +313,7 @@ export function PageHeader({ icon: Icon, title, subtitle, breadcrumbs, actions, 
       <div className="flex items-start justify-between gap-3 md:gap-4 flex-wrap">
         <div className="flex items-start gap-2 md:gap-3 min-w-0 flex-1">
           {Icon && (
-            <span className="shrink-0 mt-0.5 inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] text-accent">
+            <span className="shrink-0 mt-0.5 inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-md bg-white/[0.04] border border-white/[0.06] text-accent">
               <Icon size={15} />
             </span>
           )}
