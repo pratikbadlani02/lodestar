@@ -429,7 +429,7 @@ function SeasonalityHeatmap({ months = [] }) {
 }
 
 // ── Main page ────────────────────────────────────────────────────
-export default function Analysis() {
+export default function Analysis({ embedded = false }) {
   const { symbol: routeSym } = useParams()
   const navigate = useNavigate()
   const [symbol, setSymbol] = useSymbolPage(routeSym)
@@ -525,35 +525,37 @@ export default function Analysis() {
   const ringProgress = ringCircum * (1 - (Math.max(0, Math.min(100, score.overall || 0)) / 100))
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
+    <div className={embedded ? 'space-y-3 md:space-y-4' : 'p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto'}>
       {/* Page header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)}
-          className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] flex items-center justify-center text-ink-3 hover:text-ink-1 transition">
-          <ArrowLeft size={14} />
-        </button>
-        <div className="flex items-center gap-2">
-          <Gauge size={18} className="text-accent" />
-          <h1 className="text-lg font-display font-semibold tracking-tight">Stock Analysis</h1>
-        </div>
-        <form onSubmit={submit} className="ml-4 flex items-center gap-2">
-          <input
-            value={symInput}
-            onChange={(e) => setSymInput(e.target.value)}
-            className="bg-white/[0.04] border border-white/[0.06] focus:border-accent/40 rounded-lg px-3 py-1.5 text-xs font-mono uppercase w-28 placeholder:text-ink-5 outline-none transition"
-            placeholder="Symbol"
-          />
-          <button type="submit"
-            className="text-xs font-medium bg-brand-grad text-[#fff] rounded-lg px-3 py-1.5 shadow-glow-accent hover:brightness-110 transition">
-            Analyze
+      {!embedded && (
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate(-1)}
+            className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] flex items-center justify-center text-ink-3 hover:text-ink-1 transition">
+            <ArrowLeft size={14} />
           </button>
-          {loading && <span className="text-2xs text-ink-4 soft-pulse">Crunching…</span>}
-        </form>
-        <button onClick={load}
-          className="ml-auto w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] flex items-center justify-center text-ink-3 hover:text-ink-1 transition">
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
+          <div className="flex items-center gap-2">
+            <Gauge size={18} className="text-accent" />
+            <h1 className="text-lg font-display font-semibold tracking-tight">Stock Analysis</h1>
+          </div>
+          <form onSubmit={submit} className="ml-4 flex items-center gap-2">
+            <input
+              value={symInput}
+              onChange={(e) => setSymInput(e.target.value)}
+              className="bg-white/[0.04] border border-white/[0.06] focus:border-accent/40 rounded-lg px-3 py-1.5 text-xs font-mono uppercase w-28 placeholder:text-ink-5 outline-none transition"
+              placeholder="Symbol"
+            />
+            <button type="submit"
+              className="text-xs font-medium bg-brand-grad text-[#fff] rounded-lg px-3 py-1.5 shadow-glow-accent hover:brightness-110 transition">
+              Analyze
+            </button>
+            {loading && <span className="text-2xs text-ink-4 soft-pulse">Crunching…</span>}
+          </form>
+          <button onClick={load}
+            className="ml-auto w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] flex items-center justify-center text-ink-3 hover:text-ink-1 transition">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="card-surface px-4 py-3 text-sm text-down border-down/30 bg-down/[0.06]">{error}</div>

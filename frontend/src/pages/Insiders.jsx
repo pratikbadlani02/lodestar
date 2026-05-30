@@ -132,7 +132,7 @@ function DataTable({ records, fallback = 'No data' }) {
   )
 }
 
-export default function Insiders() {
+export default function Insiders({ embedded = false }) {
   const { symbol: routeSym } = useParams()
   const [symbol] = useSymbolPage(routeSym)
   const [tab, setTab] = useState('institutional')
@@ -187,8 +187,8 @@ export default function Insiders() {
     data?.major
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
-      <SymbolHeader activePage="insiders" />
+    <div className={embedded ? 'space-y-3 md:space-y-4' : 'p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto'}>
+      {!embedded && <SymbolHeader activePage="insiders" />}
 
       {error && (
         <div className="bg-down/10 border border-down/30 text-down text-sm rounded-lg px-3 py-2">{error}</div>

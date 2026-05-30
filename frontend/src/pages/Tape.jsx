@@ -20,7 +20,7 @@ const COND_LABEL = {
   F: 'Block',
 }
 
-export default function Tape() {
+export default function Tape({ embedded = false }) {
   const { symbol: routeSym } = useParams()
   const navigate = useNavigate()
   const [symbol, setSymbol] = useSymbolPage(routeSym)
@@ -74,30 +74,35 @@ export default function Tape() {
     return { ...t, direction }
   })
 
+  const Wrap = embedded ? 'div' : PageShell
   return (
-    <PageShell>
-      <PageHeader
-        icon={Radio}
-        title="Time & Sales"
-        subtitle={`Real-time trade tape · ${symbol}`}
-        badge={streaming ? <span className="w-2 h-2 rounded-full bg-up shadow-glow-up soft-pulse inline-block" title="Streaming" /> : null}
-        actions={
-          <Button variant="ghost" icon={ArrowLeft} onClick={() => navigate(-1)}>Back</Button>
-        }
-      />
+    <Wrap className={embedded ? 'space-y-3' : undefined}>
+      {!embedded && (
+        <PageHeader
+          icon={Radio}
+          title="Time & Sales"
+          subtitle={`Real-time trade tape · ${symbol}`}
+          badge={streaming ? <span className="w-2 h-2 rounded-full bg-up shadow-glow-up soft-pulse inline-block" title="Streaming" /> : null}
+          actions={
+            <Button variant="ghost" icon={ArrowLeft} onClick={() => navigate(-1)}>Back</Button>
+          }
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <form onSubmit={submit} className="flex items-center gap-2">
-          <input
-            value={symInput}
-            onChange={(e) => setSymInput(e.target.value)}
-            className="bg-surf-1 border border-surf-3 rounded-lg px-3 py-1.5 text-sm font-mono uppercase w-32"
-            placeholder="Symbol"
-          />
-          <button type="submit" className="bg-up hover:bg-up text-[#fff] text-sm rounded-lg px-3 py-1.5">
-            Load
-          </button>
-        </form>
+        {!embedded && (
+          <form onSubmit={submit} className="flex items-center gap-2">
+            <input
+              value={symInput}
+              onChange={(e) => setSymInput(e.target.value)}
+              className="bg-surf-1 border border-surf-3 rounded-lg px-3 py-1.5 text-sm font-mono uppercase w-32"
+              placeholder="Symbol"
+            />
+            <button type="submit" className="bg-up hover:bg-up text-[#fff] text-sm rounded-lg px-3 py-1.5">
+              Load
+            </button>
+          </form>
+        )}
 
         <select
           value={refreshMs}
@@ -165,6 +170,6 @@ export default function Tape() {
           </tbody>
         </table>
       </div>
-    </PageShell>
+    </Wrap>
   )
 }

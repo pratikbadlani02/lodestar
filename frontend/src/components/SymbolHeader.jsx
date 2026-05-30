@@ -116,14 +116,16 @@ export default function SymbolHeader({ activePage }) {
   function fireSell() { window.dispatchEvent(new CustomEvent('order-ticket:open', { detail: { side: 'sell' } })) }
 
   const up = (snap?.change ?? 0) >= 0
+  // Research views are embedded as tabs inside the Stocks page (no deep-linking
+  // to standalone routes). Each chip swaps the active tab via the URL query.
   const RESEARCH_LINKS = [
-    { id: 'stocks',       label: 'Stocks',       icon: LineChart,   to: `/stocks?symbol=${symbol}` },
-    { id: 'analysis',     label: 'Analysis',     icon: Gauge,       to: `/analysis/${symbol}` },
-    { id: 'fundamentals', label: 'Fundamentals', icon: Building2,   to: `/fundamentals/${symbol}` },
-    { id: 'options',      label: 'Options',      icon: Layers,      to: `/options/${symbol}` },
-    { id: 'dividends',    label: 'Dividends',    icon: Coins,       to: `/dividends/${symbol}` },
-    { id: 'insiders',     label: 'Insiders',     icon: Users,       to: `/insiders/${symbol}` },
-    { id: 'tape',         label: 'Tape',         icon: Radio,       to: `/tape/${symbol}` },
+    { id: 'overview',     label: 'Overview',     icon: LineChart,   to: `/stocks?symbol=${symbol}` },
+    { id: 'analysis',     label: 'Analysis',     icon: Gauge,       to: `/stocks?symbol=${symbol}&tab=analysis` },
+    { id: 'fundamentals', label: 'Fundamentals', icon: Building2,   to: `/stocks?symbol=${symbol}&tab=fundamentals` },
+    { id: 'options',      label: 'Options',      icon: Layers,      to: `/stocks?symbol=${symbol}&tab=options` },
+    { id: 'dividends',    label: 'Dividends',    icon: Coins,       to: `/stocks?symbol=${symbol}&tab=dividends` },
+    { id: 'insiders',     label: 'Insiders',     icon: Users,       to: `/stocks?symbol=${symbol}&tab=insiders` },
+    { id: 'tape',         label: 'Time & Sales', icon: Radio,       to: `/stocks?symbol=${symbol}&tab=tape` },
     { id: 'compare',      label: 'Compare',      icon: GitCompare,  to: `/compare?symbols=${symbol}` },
   ]
 

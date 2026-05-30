@@ -43,13 +43,11 @@ const NAV_GROUPS = [
     { to: '/crypto',      icon: Bitcoin,      label: 'Crypto'                  },
     { to: '/screener',    icon: Filter,       label: 'Screener'                },
   ]},
+  // Analysis · Fundamentals · Options · Dividends · Insiders are embedded as
+  // tabs inside the Stocks page (per-symbol research), so they're no longer
+  // top-level menu items. Earnings (calendar) and Compare (multi-symbol) stay.
   { id: 'research', label: 'Research', items: [
-    { to: '/analysis',    icon: Gauge,        label: 'Analysis'                },
-    { to: '/fundamentals',icon: Building2,    label: 'Fundamentals'            },
-    { to: '/options',     icon: Layers,       label: 'Options'                 },
     { to: '/earnings',    icon: Calendar,     label: 'Earnings'                },
-    { to: '/dividends',   icon: Coins,        label: 'Dividends'               },
-    { to: '/insiders',    icon: Users,        label: 'Insiders'                },
     { to: '/compare',     icon: GitCompare,   label: 'Compare Symbols'         },
   ]},
   { id: 'trade', label: 'Trade', items: [

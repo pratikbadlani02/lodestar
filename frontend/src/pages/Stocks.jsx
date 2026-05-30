@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Activity, Newspaper, Briefcase, ListOrdered, Clock, RefreshCw, Plus, X,
@@ -13,6 +13,19 @@ import { Card, SectionHeader, Sparkline } from '../components/ui/primitives'
 import { PnlCell } from '../components/ui/charts'
 import { fmt, fmtBig, fmtNum, fmtPct, fmtSignedPct } from '../components/ui/format'
 import EmptyState from '../components/ui/EmptyState'
+
+// Research views embedded as tabs (lazy so they don't bloat the Stocks chunk).
+const Analysis     = lazy(() => import('./Analysis'))
+const Fundamentals = lazy(() => import('./Fundamentals'))
+const Options      = lazy(() => import('./Options'))
+const Dividends    = lazy(() => import('./Dividends'))
+const Insiders     = lazy(() => import('./Insiders'))
+const Tape         = lazy(() => import('./Tape'))
+
+const RESEARCH_TABS = {
+  analysis: Analysis, fundamentals: Fundamentals, options: Options,
+  dividends: Dividends, insiders: Insiders, tape: Tape,
+}
 
 // ── Local formatters ────────────────────────────────────────────
 const fmtP = (n) => (n == null ? '—' : `$${Number(n).toFixed(2)}`)
@@ -442,7 +455,12 @@ export default function Stocks() {
   const { symbol, setSymbol } = useSymbol()
   const pollRef = useRef(null)
 
-  // URL ?symbol= → context (once), then keep URL in sync as symbol changes.
+  // Active research tab is the source-of-truth in the URL (?tab=). The chips in
+  // SymbolHeader navigate here with the right query, which updates this value.
+  const tab = searchParams.get('tab') || 'overview'
+
+  // URL ?symbol= → context (once), then keep URL in sync as symbol changes
+  // (preserving the active tab).
   useEffect(() => {
     const urlSym = searchParams.get('symbol')?.toUpperCase()
     if (urlSym && urlSym !== symbol) setSymbol(urlSym)
@@ -450,7 +468,12 @@ export default function Stocks() {
   }, [])
   useEffect(() => {
     const urlSym = searchParams.get('symbol')?.toUpperCase()
-    if (symbol && symbol !== urlSym) setSearchParams({ symbol }, { replace: true })
+    if (symbol && symbol !== urlSym) {
+      const p = { symbol }
+      const t = searchParams.get('tab')
+      if (t) p.tab = t
+      setSearchParams(p, { replace: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol])
 
@@ -508,6 +531,7 @@ export default function Stocks() {
   }, [symbol])
 
   const position = positions.find((p) => (p.symbol || '').toUpperCase() === symbol)
+  const TabComponent = RESEARCH_TABS[tab]
 
   return (
     <div className="p-3 sm:p-4 md:p-5 max-w-[1700px] mx-auto">
@@ -515,35 +539,43 @@ export default function Stocks() {
         {/* Watchlist */}
         <Watchlist active={symbol} onSelect={setSymbol} />
 
-        {/* Research area */}
+        {/* Research area — SymbolHeader's chips switch the active tab below */}
         <div className="flex-1 min-w-0 space-y-3">
-          <SymbolHeader activePage="stocks" />
+          <SymbolHeader activePage={tab} />
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-            {/* Center: chart + lower tabs */}
-            <div className="xl:col-span-2 space-y-3">
-              <Card className="overflow-hidden">
-                <SectionHeader
-                  icon={BarChart3}
-                  title="Price Chart"
-                  action={
-                    <button onClick={() => loadSnap(symbol)} className="text-ink-4 hover:text-ink-1 transition" title="Refresh quote">
-                      <RefreshCw size={12} />
-                    </button>
-                  }
-                />
-                <ChartWidget symbol={symbol} height={440} />
-              </Card>
-              <LowerSection symbol={symbol} news={news} newsLoading={newsLoading} orders={orders} />
-            </div>
+          {tab === 'overview' ? (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+              {/* Center: chart + lower tabs */}
+              <div className="xl:col-span-2 space-y-3">
+                <Card className="overflow-hidden">
+                  <SectionHeader
+                    icon={BarChart3}
+                    title="Price Chart"
+                    action={
+                      <button onClick={() => loadSnap(symbol)} className="text-ink-4 hover:text-ink-1 transition" title="Refresh quote">
+                        <RefreshCw size={12} />
+                      </button>
+                    }
+                  />
+                  <ChartWidget symbol={symbol} height={440} />
+                </Card>
+                <LowerSection symbol={symbol} news={news} newsLoading={newsLoading} orders={orders} />
+              </div>
 
-            {/* Right: quote + key stats + position */}
-            <div className="space-y-3">
-              <QuotePanel snap={snap} />
-              <KeyStats profile={profile} last={snap?.price} />
-              <PositionCard position={position} symbol={symbol} />
+              {/* Right: quote + key stats + position */}
+              <div className="space-y-3">
+                <QuotePanel snap={snap} />
+                <KeyStats profile={profile} last={snap?.price} />
+                <PositionCard position={position} symbol={symbol} />
+              </div>
             </div>
-          </div>
+          ) : TabComponent ? (
+            <Suspense fallback={<div className="py-16 text-center text-sm text-ink-4 soft-pulse">Loading…</div>}>
+              <TabComponent embedded />
+            </Suspense>
+          ) : (
+            <div className="py-16 text-center text-sm text-ink-4">Unknown view.</div>
+          )}
         </div>
       </div>
     </div>

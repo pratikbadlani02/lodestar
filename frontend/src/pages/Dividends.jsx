@@ -58,7 +58,7 @@ function StatTile({ label, value, sub, tone }) {
   )
 }
 
-export default function Dividends() {
+export default function Dividends({ embedded = false }) {
   const { symbol: routeSym } = useParams()
   const [symbol] = useSymbolPage(routeSym)
   const [data, setData] = useState(null)
@@ -97,8 +97,8 @@ export default function Dividends() {
   const yieldVsAvg = (yieldCur != null && yield5y != null) ? yieldCur - yield5y : null
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto">
-      <SymbolHeader activePage="dividends" />
+    <div className={embedded ? 'space-y-3 md:space-y-4' : 'p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4 max-w-[1400px] mx-auto'}>
+      {!embedded && <SymbolHeader activePage="dividends" />}
 
       {error && (
         <div className="bg-down/10 border border-down/30 text-down text-sm rounded-lg px-3 py-2">{error}</div>
