@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { toast } from '../lib/toast'
-import { useStore, selectStrategies } from '../lib/store'
+import { useStore, selectStrategies, selectStrategiesLoaded } from '../lib/store'
 import {
   PageShell, PageHeader, Card, Button, IconButton, Modal,
   Input, Select, Textarea, FormField, Alert, StatusBadge, SkeletonRows, Pill,
@@ -22,7 +22,7 @@ const STATUS_FILTERS = [
 export default function Strategies() {
   const navigate = useNavigate()
   const strategies = useStore(selectStrategies)
-  const hasBoot = useStore((s) => s.strategies.length > 0 || s.wsLastMessage !== null)
+  const hasBoot = useStore(selectStrategiesLoaded)
   const [available, setAvailable] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [createSeed, setCreateSeed] = useState(null)

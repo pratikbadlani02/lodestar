@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, RefreshCw, ArrowDownAZ, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react'
+import { LayoutGrid, RefreshCw, Grid2x2, Map } from 'lucide-react'
 import { api } from '../lib/api'
 import {
   PageShell, PageHeader, Card, IconButton, Select, Pill,
@@ -23,21 +23,18 @@ const SECTOR_MAP = {
   Materials:               ['LIN', 'SHW', 'APD', 'FCX', 'NEM'],
 }
 
-// Color intensity scale — real gradient driven by alpha. The previous implementation
-// reused the same Tailwind class across multiple brackets, killing the gradient.
-// Now: hue from up/down semantic vars, alpha from |pct| / 5.
+// Color intensity scale — real gradient driven by alpha. Hue from up/down
+// semantic vars, alpha from |pct| / 5 (saturating at ±5%).
 function tileBg(pct) {
   if (pct == null || Number.isNaN(pct)) return 'rgb(var(--c-surf-2))'
-  const mag = Math.min(Math.abs(pct) / 5, 1)            // saturate at ±5%
-  const alpha = 0.10 + mag * 0.55                       // 0.10..0.65
+  const mag = Math.min(Math.abs(pct) / 5, 1)
+  const alpha = 0.12 + mag * 0.58
   const hue = pct >= 0 ? '--c-up' : '--c-down'
   return `rgba(var(${hue}) / ${alpha.toFixed(3)})`
 }
 function tileText(pct) {
   if (pct == null) return 'rgb(var(--c-ink-4))'
-  const mag = Math.abs(pct)
-  // High-magnitude tiles: pure white text. Low-magnitude: themed up/down text.
-  if (mag >= 2.5) return '#fff'
+  if (Math.abs(pct) >= 2.5) return '#fff'
   return pct >= 0 ? 'rgb(var(--c-up))' : 'rgb(var(--c-down))'
 }
 
@@ -53,16 +50,81 @@ const fmtVol = (v) => {
   return String(v)
 }
 
-// Auto-refresh cadence (ms). Long enough to avoid hammering the API but
-// frequent enough that prices feel current.
+// Auto-refresh cadence (ms).
 const REFRESH_MS = 30000
 
-// ── Legend bar — five fixed buckets with their actual colors ────────
+// Weight that drives tile area. Dollar-volume (price × volume) is the default —
+// snapshots don't carry market cap, and dollar-volume is the best "importance"
+// proxy we have. Volume and Equal are the alternatives.
+function weightOf(it, mode) {
+  if (mode === 'equal')  return 1
+  if (mode === 'volume') return Math.max(it.vol || 0, 1)
+  return Math.max((it.vol || 0) * (it.last || 0), 1)   // dollar volume
+}
+
+// ── Squarified treemap (Bruls, Huizing & van Wijk) ──────────────────
+// Returns each input item with absolute {x, y, w, h} added. Items must carry
+// a positive `value`; they're laid out to fill the given rect by area.
+function worstRatio(areas, side) {
+  const sum = areas.reduce((s, a) => s + a, 0)
+  const max = Math.max(...areas)
+  const min = Math.min(...areas)
+  const s2 = sum * sum
+  const w2 = side * side
+  return Math.max((w2 * max) / s2, s2 / (w2 * min))
+}
+function layoutRow(row, x, y, w, h, out) {
+  const rowArea = row.reduce((s, r) => s + r.area, 0)
+  if (w >= h) {
+    const rowW = rowArea / h
+    let cy = y
+    for (const r of row) {
+      const rh = r.area / rowW
+      out.push({ ...r, x, y: cy, w: rowW, h: rh })
+      cy += rh
+    }
+    return { x: x + rowW, y, w: w - rowW, h }
+  }
+  const rowH = rowArea / w
+  let cx = x
+  for (const r of row) {
+    const rw = r.area / rowH
+    out.push({ ...r, x: cx, y, w: rw, h: rowH })
+    cx += rw
+  }
+  return { x, y: y + rowH, w, h: h - rowH }
+}
+function squarify(data, rect) {
+  let { x, y, w, h } = rect
+  if (w <= 0 || h <= 0 || !data.length) return []
+  const total = data.reduce((s, d) => s + d.value, 0) || 1
+  const scale = (w * h) / total
+  const items = data.map((d) => ({ ...d, area: d.value * scale }))
+  const out = []
+  let row = []
+  let i = 0
+  while (i < items.length) {
+    const next = items[i]
+    const side = Math.min(w, h)
+    const candidate = [...row, next].map((r) => r.area)
+    if (row.length === 0 || worstRatio(candidate, side) <= worstRatio(row.map((r) => r.area), side)) {
+      row.push(next)
+      i++
+    } else {
+      ;({ x, y, w, h } = layoutRow(row, x, y, w, h, out))
+      row = []
+    }
+  }
+  if (row.length) layoutRow(row, x, y, w, h, out)
+  return out
+}
+
+// ── Legend bar — fixed buckets with their actual colors ─────────────
 function Legend() {
   const buckets = [-4, -2, -0.5, 0.5, 2, 4]
   return (
     <div className="flex items-center gap-2 text-2xs text-ink-4">
-      <span>Day change:</span>
+      <span className="hidden sm:inline">Day change:</span>
       {buckets.map((b, i) => (
         <span
           key={i}
@@ -103,11 +165,15 @@ export default function Heatmap() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [updatedAt, setUpdatedAt] = useState(null)
-  const [sortMode, setSortMode] = useState('change_desc')  // change_desc | change_asc | volume | alpha
-  const [sizeMode, setSizeMode] = useState('uniform')      // uniform | volume
+  const [viewMode, setViewMode] = useState('treemap')      // treemap | grid
+  const [sizeMode, setSizeMode] = useState('dollarvol')    // dollarvol | volume | equal
+  const [sortMode, setSortMode] = useState('change_desc')  // grid view sort
   const [activeSector, setActiveSector] = useState(null)   // null = all
-  const [collapsed, setCollapsed] = useState({})           // { sector: bool }
+  const [collapsed, setCollapsed] = useState({})           // grid view collapse
+  const [hover, setHover] = useState(null)                 // { it, x, y }
   const intervalRef = useRef(null)
+  const mapRef = useRef(null)
+  const [size, setSize] = useState({ w: 0, h: 0 })
 
   const allSymbols = useMemo(
     () => Array.from(new Set(Object.values(SECTOR_MAP).flat())),
@@ -134,6 +200,21 @@ export default function Heatmap() {
     return () => clearInterval(intervalRef.current)
   }, [])
 
+  const allSymbolsLoaded = Object.keys(snapshots).length > 0
+
+  // Measure the treemap container so the layout can fill it. The container is
+  // conditionally rendered (only once data arrives), so re-run when the treemap
+  // first becomes visible — not just on view toggle.
+  useEffect(() => {
+    const el = mapRef.current
+    if (!el) return
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [viewMode, allSymbolsLoaded])
+
   // Stat extractors from a snapshot record
   function snapStats(sym) {
     const s = snapshots[sym]
@@ -148,33 +229,78 @@ export default function Heatmap() {
     return { sym, last, prev, open, high, low, vol, pct }
   }
 
-  // Build per-sector items, filtered/sorted by current settings.
-  const sectorData = useMemo(() => {
-    const result = []
+  // Sectors with resolved items + aggregates — shared by both views.
+  const sectors = useMemo(() => {
+    const out = []
     for (const [sector, syms] of Object.entries(SECTOR_MAP)) {
-      if (activeSector && sector !== activeSector) continue
       const items = syms
         .map(snapStats)
         .filter((x) => x && x.pct != null)
-      if (items.length === 0) continue
+        .map((it) => ({ ...it, weight: weightOf(it, sizeMode) }))
+      if (!items.length) continue
+      const avg = items.reduce((s, x) => s + x.pct, 0) / items.length
+      const weight = items.reduce((s, x) => s + x.weight, 0)
+      const totalVol = items.reduce((s, x) => s + (x.vol || 0), 0)
+      out.push({ sector, items, avg, weight, totalVol })
+    }
+    return out
+  }, [snapshots, sizeMode])
 
-      // Sort
+  const visibleSectors = useMemo(
+    () => (activeSector ? sectors.filter((s) => s.sector === activeSector) : sectors),
+    [sectors, activeSector]
+  )
+
+  const allItems = visibleSectors.flatMap((s) => s.items)
+  const marketAvg = allItems.length ? allItems.reduce((s, x) => s + x.pct, 0) / allItems.length : 0
+
+  // ── Treemap geometry ──────────────────────────────────────────────
+  const HEADER_H = 17
+  const GAP = 2
+  const treemap = useMemo(() => {
+    if (viewMode !== 'treemap' || !size.w || !size.h || !visibleSectors.length) {
+      return { tiles: [], labels: [] }
+    }
+    const tiles = []
+    const labels = []
+
+    if (visibleSectors.length === 1) {
+      const s = visibleSectors[0]
+      const data = [...s.items].sort((a, b) => b.weight - a.weight).map((it) => ({ ...it, value: it.weight }))
+      tiles.push(...squarify(data, { x: 0, y: HEADER_H, w: size.w, h: Math.max(size.h - HEADER_H, 1) }))
+      labels.push({ sector: s.sector, avg: s.avg, x: 0, y: 0, w: size.w, h: HEADER_H })
+      return { tiles, labels }
+    }
+
+    const sectorRects = squarify(
+      [...visibleSectors].sort((a, b) => b.weight - a.weight).map((s) => ({ ...s, value: s.weight })),
+      { x: 0, y: 0, w: size.w, h: size.h }
+    )
+    for (const sr of sectorRects) {
+      labels.push({ sector: sr.sector, avg: sr.avg, x: sr.x, y: sr.y, w: sr.w, h: HEADER_H })
+      const inner = {
+        x: sr.x + GAP,
+        y: sr.y + HEADER_H,
+        w: Math.max(sr.w - GAP * 2, 1),
+        h: Math.max(sr.h - HEADER_H - GAP, 1),
+      }
+      const data = [...sr.items].sort((a, b) => b.weight - a.weight).map((it) => ({ ...it, value: it.weight }))
+      tiles.push(...squarify(data, inner))
+    }
+    return { tiles, labels }
+  }, [viewMode, size, visibleSectors])
+
+  // ── Grid view data (sorted within sector) ─────────────────────────
+  const gridData = useMemo(() => {
+    return visibleSectors.map((s) => {
+      const items = [...s.items]
       if (sortMode === 'change_desc') items.sort((a, b) => (b.pct || 0) - (a.pct || 0))
       else if (sortMode === 'change_asc') items.sort((a, b) => (a.pct || 0) - (b.pct || 0))
       else if (sortMode === 'volume')   items.sort((a, b) => (b.vol || 0) - (a.vol || 0))
       else if (sortMode === 'alpha')    items.sort((a, b) => a.sym.localeCompare(b.sym))
-
-      const avg = items.reduce((s, x) => s + (x.pct || 0), 0) / items.length
-      const totalVol = items.reduce((s, x) => s + (x.vol || 0), 0)
-      const maxVol = Math.max(1, ...items.map((x) => x.vol || 0))
-      result.push({ sector, items, avg, totalVol, maxVol })
-    }
-    return result
-  }, [snapshots, sortMode, activeSector])
-
-  // Overall market breadth across all visible items
-  const allItems = sectorData.flatMap((s) => s.items)
-  const marketAvg = allItems.length ? allItems.reduce((s, x) => s + (x.pct || 0), 0) / allItems.length : 0
+      return { ...s, items }
+    })
+  }, [visibleSectors, sortMode])
 
   function toggleSector(name) {
     setCollapsed((c) => ({ ...c, [name]: !c[name] }))
@@ -199,16 +325,38 @@ export default function Heatmap() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <Select value={sortMode} onChange={(e) => setSortMode(e.target.value)} className="min-w-[150px]">
-              <option value="change_desc">Best → Worst</option>
-              <option value="change_asc">Worst → Best</option>
-              <option value="volume">Volume</option>
-              <option value="alpha">A → Z</option>
+            {/* View toggle */}
+            <div className="flex items-center rounded-md border border-white/[0.08] overflow-hidden">
+              <button
+                onClick={() => setViewMode('treemap')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-2xs transition ${
+                  viewMode === 'treemap' ? 'bg-accent/15 text-accent' : 'text-ink-3 hover:text-ink-1 hover:bg-white/[0.06]'
+                }`}
+              >
+                <Map size={12} /> Treemap
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-2xs transition border-l border-white/[0.08] ${
+                  viewMode === 'grid' ? 'bg-accent/15 text-accent' : 'text-ink-3 hover:text-ink-1 hover:bg-white/[0.06]'
+                }`}
+              >
+                <Grid2x2 size={12} /> Grid
+              </button>
+            </div>
+            <Select value={sizeMode} onChange={(e) => setSizeMode(e.target.value)} className="min-w-[140px]" title="Tile size weight">
+              <option value="dollarvol">Size: $ volume</option>
+              <option value="volume">Size: volume</option>
+              <option value="equal">Size: equal</option>
             </Select>
-            <Select value={sizeMode} onChange={(e) => setSizeMode(e.target.value)} className="min-w-[130px]">
-              <option value="uniform">Uniform tiles</option>
-              <option value="volume">Sized by volume</option>
-            </Select>
+            {viewMode === 'grid' && (
+              <Select value={sortMode} onChange={(e) => setSortMode(e.target.value)} className="min-w-[140px]">
+                <option value="change_desc">Best → Worst</option>
+                <option value="change_asc">Worst → Best</option>
+                <option value="volume">Volume</option>
+                <option value="alpha">A → Z</option>
+              </Select>
+            )}
             <IconButton icon={RefreshCw} label="Refresh" onClick={load} className={loading ? 'animate-spin' : ''} />
           </div>
         }
@@ -250,71 +398,146 @@ export default function Heatmap() {
         </Card>
       )}
 
-      {sectorData.length === 0 && !loading && !error && (
+      {visibleSectors.length === 0 && !loading && !error && (
         <Card className="p-10 text-center text-ink-4 text-sm">
           No data for the selected filter.
         </Card>
       )}
 
-      {/* Sectors */}
-      <div className="space-y-3">
-        {sectorData.map(({ sector, items, avg, totalVol, maxVol }) => (
-          <Card key={sector} className="overflow-hidden">
-            <button
-              onClick={() => toggleSector(sector)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition text-left"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <h3 className="font-display font-semibold text-sm text-ink-1 truncate">{sector}</h3>
-                <span className="text-2xs font-mono tabular text-ink-5">{items.length}</span>
+      {/* ── Treemap view ─────────────────────────────────────────── */}
+      {viewMode === 'treemap' && visibleSectors.length > 0 && (
+        <Card className="p-1.5">
+          <div
+            ref={mapRef}
+            className="relative w-full h-[74vh] min-h-[520px]"
+            onMouseLeave={() => setHover(null)}
+          >
+            {/* Sector labels */}
+            {treemap.labels.map((l) => (
+              <div
+                key={l.sector}
+                className="absolute flex items-center gap-1.5 px-1.5 overflow-hidden pointer-events-none"
+                style={{ left: l.x, top: l.y, width: l.w, height: l.h }}
+              >
+                <span className="text-2xs font-display font-semibold text-ink-2 truncate uppercase tracking-wide">
+                  {l.sector}
+                </span>
+                <span className={`text-2xs font-mono tabular ${l.avg >= 0 ? 'text-up' : 'text-down'}`}>
+                  {fmtPct(l.avg)}
+                </span>
               </div>
-              <BreadthBar items={items} />
-              <div className="flex items-center gap-3 text-2xs font-mono tabular shrink-0">
-                <span className="text-ink-4 hidden md:inline">vol {fmtVol(totalVol)}</span>
-                <Pill variant={avg >= 0 ? 'up' : 'down'} className="font-mono tabular">
-                  avg {fmtPct(avg)}
-                </Pill>
-              </div>
-            </button>
+            ))}
 
-            {!collapsed[sector] && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1 p-2 border-t border-white/[0.06]">
-                {items.map((it) => {
-                  // Sized-by-volume mode: scale tile height by relative volume.
-                  // Min 1, max 2 cells tall (via row-span) so the grid stays sane.
-                  const sized = sizeMode === 'volume'
-                  const rel = (it.vol || 0) / maxVol
-                  const rowSpan = sized && rel > 0.5 ? 2 : 1
-                  const isHero = sized && rel > 0.5
-                  return (
-                    <Tile
+            {/* Stock tiles */}
+            {treemap.tiles.map((t) => {
+              const w = Math.max(t.w - 1, 0)
+              const h = Math.max(t.h - 1, 0)
+              const symFs = Math.max(8, Math.min(h * 0.42, w / (Math.max(t.sym.length, 3) * 0.62), 26))
+              const showSym = w > 22 && h > 13
+              const showPct = w > 38 && h > 30
+              return (
+                <button
+                  key={t.sym}
+                  onClick={() => navigate(`/analysis/${t.sym}`)}
+                  onContextMenu={(e) => ctx.onContextMenu(e, t.sym)}
+                  onMouseEnter={(e) => setHover({ it: t, x: e.clientX, y: e.clientY })}
+                  onMouseMove={(e) => setHover((hv) => hv && hv.it.sym === t.sym ? { ...hv, x: e.clientX, y: e.clientY } : hv)}
+                  className="absolute rounded-[3px] flex flex-col items-center justify-center overflow-hidden transition hover:ring-2 hover:ring-white/40 hover:z-10 focus:outline-none focus:ring-2 focus:ring-accent"
+                  style={{ left: t.x, top: t.y, width: w, height: h, background: tileBg(t.pct), color: tileText(t.pct) }}
+                >
+                  {showSym && (
+                    <span className="font-mono font-bold leading-none" style={{ fontSize: symFs }}>{t.sym}</span>
+                  )}
+                  {showPct && (
+                    <span className="font-mono tabular leading-none mt-1 opacity-95" style={{ fontSize: Math.max(7, symFs * 0.6) }}>
+                      {fmtPct(t.pct)}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ── Grid view (sector cards) ─────────────────────────────── */}
+      {viewMode === 'grid' && (
+        <div className="space-y-3">
+          {gridData.map(({ sector, items, avg, totalVol }) => (
+            <Card key={sector} className="overflow-hidden">
+              <button
+                onClick={() => toggleSector(sector)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition text-left"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <h3 className="font-display font-semibold text-sm text-ink-1 truncate">{sector}</h3>
+                  <span className="text-2xs font-mono tabular text-ink-5">{items.length}</span>
+                </div>
+                <BreadthBar items={items} />
+                <div className="flex items-center gap-3 text-2xs font-mono tabular shrink-0">
+                  <span className="text-ink-4 hidden md:inline">vol {fmtVol(totalVol)}</span>
+                  <Pill variant={avg >= 0 ? 'up' : 'down'} className="font-mono tabular">
+                    avg {fmtPct(avg)}
+                  </Pill>
+                </div>
+              </button>
+
+              {!collapsed[sector] && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1 p-2 border-t border-white/[0.06]">
+                  {items.map((it) => (
+                    <GridTile
                       key={it.sym}
                       data={it}
-                      rowSpan={rowSpan}
-                      hero={isHero}
                       onClick={() => navigate(`/analysis/${it.sym}`)}
                       onContextMenu={(e) => ctx.onContextMenu(e, it.sym)}
                     />
-                  )
-                })}
-              </div>
-            )}
-          </Card>
-        ))}
-      </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ── Floating tooltip (treemap) ───────────────────────────── */}
+      {hover && <HoverTip hover={hover} />}
+
       {ctx.menu}
     </PageShell>
   )
 }
 
-// ── Tile — single-symbol cell with hover preview ─────────────────────
-function Tile({ data, rowSpan = 1, hero = false, onClick, onContextMenu }) {
+// ── Floating tooltip following the cursor ───────────────────────────
+function HoverTip({ hover }) {
+  const { it, x, y } = hover
+  // Flip to the left near the right edge so it never runs off-screen.
+  const flip = x > window.innerWidth - 200
+  return (
+    <div
+      className="fixed z-50 pointer-events-none"
+      style={{ left: x + (flip ? -12 : 12), top: y + 12, transform: flip ? 'translateX(-100%)' : undefined }}
+    >
+      <div className="card-surface px-3 py-2 text-2xs font-mono tabular whitespace-nowrap text-ink-1 shadow-2xl">
+        <div className="flex items-center justify-between gap-4 mb-1">
+          <span className="font-display font-semibold text-sm text-ink-1">{it.sym}</span>
+          <span className={`font-semibold ${it.pct >= 0 ? 'text-up' : 'text-down'}`}>{fmtPct(it.pct)}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+          <span className="text-ink-4">Last</span><span>${it.last?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">Open</span><span>${it.open?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">High</span><span>${it.high?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">Low</span><span>${it.low?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">Vol</span><span>{fmtVol(it.vol)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Grid tile — single-symbol cell with hover preview ───────────────
+function GridTile({ data, onClick, onContextMenu }) {
   const { sym, pct, last, open, high, low, vol } = data
-  const style = {
-    background: tileBg(pct),
-    color: tileText(pct),
-    gridRow: rowSpan > 1 ? `span ${rowSpan} / span ${rowSpan}` : undefined,
-  }
+  const style = { background: tileBg(pct), color: tileText(pct) }
   return (
     <button
       onClick={onClick}
@@ -322,15 +545,9 @@ function Tile({ data, rowSpan = 1, hero = false, onClick, onContextMenu }) {
       style={style}
       className="group relative rounded-md p-2 transition hover:ring-2 hover:ring-white/30 hover:z-10 text-left focus:outline-none focus:ring-2 focus:ring-accent overflow-hidden"
     >
-      <div className={`font-mono font-bold ${hero ? 'text-sm' : 'text-xs'}`}>{sym}</div>
-      <div className={`font-mono tabular ${hero ? 'text-xs' : 'text-2xs'} opacity-95`}>{fmtPct(pct)}</div>
-      {hero && (
-        <div className="text-2xs font-mono tabular opacity-80 mt-0.5">
-          ${last?.toFixed(2) ?? '—'}
-        </div>
-      )}
+      <div className="font-mono font-bold text-xs">{sym}</div>
+      <div className="font-mono tabular text-2xs opacity-95">{fmtPct(pct)}</div>
 
-      {/* Rich hover popover — sits absolutely so it doesn't reflow the grid */}
       <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2 z-20 hidden group-hover:block pointer-events-none">
         <div className="card-surface px-3 py-2 text-2xs font-mono tabular whitespace-nowrap text-ink-1 shadow-2xl">
           <div className="font-display font-semibold text-sm text-ink-1 mb-1">{sym}</div>

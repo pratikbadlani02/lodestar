@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { toast } from '../lib/toast'
-import { useStore, selectBacktests } from '../lib/store'
+import { useStore, selectBacktests, selectBacktestsLoaded } from '../lib/store'
 import EmptyState from '../components/ui/EmptyState'
 import {
   PageShell, PageHeader, Card, SectionHeader, Button, IconButton, Modal,
@@ -40,7 +40,7 @@ function fmtDuration(start, end) {
 export default function Backtests() {
   const navigate = useNavigate()
   const rows = useStore(selectBacktests)
-  const hasBoot = useStore((s) => s.backtests.length > 0 || s.wsLastMessage !== null)
+  const hasBoot = useStore(selectBacktestsLoaded)
 
   const [showCreate, setShowCreate] = useState(false)
   const [createSeed, setCreateSeed] = useState(null)      // pre-fill from duplicate

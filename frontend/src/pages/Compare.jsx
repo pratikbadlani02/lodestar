@@ -214,7 +214,7 @@ export default function Compare() {
                   <th
                     key={s}
                     className="px-3 py-2 text-right whitespace-nowrap font-mono font-semibold text-ink-1 cursor-pointer hover:text-up"
-                    onClick={() => navigate(`/stocks?symbol=${s}`)}
+                    onClick={() => navigate(`/analysis/${s}`)}
                   >
                     {s}
                   </th>

@@ -61,12 +61,15 @@ export default function TopBar({ onMenuOpen }) {
     setInput('')
     setOpen(false)
     const pathName = window.location.pathname
-    const prefixes = ['/stocks', '/analysis', '/options', '/fundamentals',
+    const prefixes = ['/analysis', '/options', '/fundamentals',
                       '/tape', '/dividends', '/insiders', '/workspace']
     const matched = prefixes.find((p) => pathName === p || pathName.startsWith(`${p}/`))
     if (matched) {
-      if (matched === '/stocks') navigate(`/stocks?symbol=${next}`)
-      else navigate(`${matched}/${next}`)
+      navigate(`${matched}/${next}`)
+    } else if (pathName === '/stocks' || pathName.startsWith('/stocks')) {
+      // Stocks is a single-screen SPA driven by SymbolContext — keep the user
+      // on the page and just reflect the new symbol in the URL.
+      navigate(`/stocks?symbol=${next}`)
     }
   }
 
@@ -150,10 +153,10 @@ export default function TopBar({ onMenuOpen }) {
       {/* Quick jump links */}
       <div className="ml-auto hidden md:flex items-center gap-0.5 bg-white/[0.025] border border-white/[0.06] rounded-lg p-0.5">
         {[
-          ['Chart',    `/stocks?symbol=${symbol}`],
           ['Analysis', `/analysis/${symbol}`],
           ['Options',  `/options/${symbol}`],
           ['Tape',     `/tape/${symbol}`],
+          ['Stocks',   `/stocks`],
           ['Earnings', `/earnings`],
         ].map(([label, to]) => (
           <button

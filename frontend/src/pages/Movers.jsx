@@ -113,7 +113,7 @@ export default function Movers() {
   useEffect(() => { load() }, [])
 
   function openSymbol(sym) {
-    navigate(`/stocks?symbol=${sym}`)
+    navigate(`/analysis/${sym}`)
   }
 
   // Header strip stats: best gainer, worst loser, spread

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { RefreshCw, Plus, ListOrdered } from 'lucide-react'
 import { api } from '../lib/api'
 import { toast } from '../lib/toast'
-import { useStore, selectOrders } from '../lib/store'
+import { useStore, selectOrders, selectOrdersLoaded } from '../lib/store'
 import {
   PageShell, PageHeader, Card, Button, IconButton, Modal,
   Input, Select, Checkbox, FormField, Alert, StatusBadge, SkeletonRows,
@@ -13,9 +13,9 @@ export default function Orders() {
   // Orders come from the global store; WS pushes updates on order_update events
   // so we never have to poll. Empty initial state shows skeleton via length check.
   const orders = useStore(selectOrders)
-  const hasBoot = useStore((s) => s.wsLastMessage !== null || s.orders.length > 0)
+  const ordersLoaded = useStore(selectOrdersLoaded)
   const [showSubmit, setShowSubmit] = useState(false)
-  const loading = !hasBoot && orders.length === 0
+  const loading = !ordersLoaded && orders.length === 0
 
   async function sync(id) {
     await api.syncOrder(id)
@@ -91,7 +91,7 @@ export default function Orders() {
         )}
       </Card>
 
-      {showSubmit && <SubmitModal onClose={() => setShowSubmit(false)} onSubmitted={() => { setShowSubmit(false); load() }} />}
+      {showSubmit && <SubmitModal onClose={() => setShowSubmit(false)} onSubmitted={() => { setShowSubmit(false); useStore.getState().loadOrders() }} />}
     </PageShell>
   )
 }

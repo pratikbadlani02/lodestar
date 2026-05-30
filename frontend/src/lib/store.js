@@ -46,31 +46,38 @@ export const useStore = create((set, get) => ({
   }),
 
   // ── Orders ───────────────────────────────────────────────
+  // `*Loaded` flags flip true after the first fetch resolves (success OR
+  // failure) so pages can distinguish "still loading" from "loaded, empty"
+  // and avoid showing skeletons forever on a quiet/empty account.
   orders: [],
+  ordersLoaded: false,
   loadOrders: (limit = 100) => coalesce('orders', async () => {
-    try { set({ orders: await api.listOrders(limit) }) } catch {}
+    try { set({ orders: await api.listOrders(limit) }) } catch {} finally { set({ ordersLoaded: true }) }
   }),
 
   // ── Alerts ───────────────────────────────────────────────
   alerts: [],
+  alertsLoaded: false,
   unackCount: 0,
   loadAlerts: () => coalesce('alerts', async () => {
     try {
       const all = await api.listAlerts({ limit: 100 })
       set({ alerts: all, unackCount: all.filter((a) => !a.acknowledged).length })
-    } catch {}
+    } catch {} finally { set({ alertsLoaded: true }) }
   }),
 
   // ── Strategies ───────────────────────────────────────────
   strategies: [],
+  strategiesLoaded: false,
   loadStrategies: () => coalesce('strategies', async () => {
-    try { set({ strategies: await api.listStrategies() }) } catch {}
+    try { set({ strategies: await api.listStrategies() }) } catch {} finally { set({ strategiesLoaded: true }) }
   }),
 
   // ── Backtests ────────────────────────────────────────────
   backtests: [],
+  backtestsLoaded: false,
   loadBacktests: () => coalesce('backtests', async () => {
-    try { set({ backtests: await api.listBacktests() }) } catch {}
+    try { set({ backtests: await api.listBacktests() }) } catch {} finally { set({ backtestsLoaded: true }) }
   }),
 
   // ── WS connection state ──────────────────────────────────
@@ -164,8 +171,12 @@ export const selectHealth     = (s) => s.health
 export const selectAccount    = (s) => s.account
 export const selectPositions  = (s) => s.positions
 export const selectOrders     = (s) => s.orders
+export const selectOrdersLoaded     = (s) => s.ordersLoaded
 export const selectAlerts     = (s) => s.alerts
+export const selectAlertsLoaded     = (s) => s.alertsLoaded
 export const selectUnackCount = (s) => s.unackCount
 export const selectStrategies = (s) => s.strategies
+export const selectStrategiesLoaded = (s) => s.strategiesLoaded
 export const selectBacktests  = (s) => s.backtests
+export const selectBacktestsLoaded  = (s) => s.backtestsLoaded
 export const selectWsState    = (s) => ({ connected: s.wsConnected, last: s.wsLastMessage })

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BarChart3, Gauge, TrendingUp, TrendingDown, Bell, Copy, X, Layers, Radio, Newspaper,
+  BarChart3, Gauge, TrendingUp, TrendingDown, Bell, Copy, X, Layers, Radio,
 } from 'lucide-react'
 import { useSymbol } from '../../lib/SymbolContext'
 
@@ -71,11 +71,10 @@ export function useSymbolContextMenu({ onRemove } = {}) {
   const close = useCallback(() => setState((s) => ({ ...s, open: false })), [])
 
   const items = state.symbol ? [
-    { label: 'View Chart', icon: BarChart3, onClick: () => { setSymbol(state.symbol); navigate(`/stocks?symbol=${state.symbol}`) } },
     { label: 'Open Analysis', icon: Gauge, onClick: () => { setSymbol(state.symbol); navigate(`/analysis/${state.symbol}`) } },
     { label: 'Options Chain', icon: Layers, onClick: () => { setSymbol(state.symbol); navigate(`/options/${state.symbol}`) } },
     { label: 'Time & Sales', icon: Radio, onClick: () => { setSymbol(state.symbol); navigate(`/tape/${state.symbol}`) } },
-    { label: 'News', icon: Newspaper, onClick: () => { setSymbol(state.symbol); navigate(`/stocks?symbol=${state.symbol}`) } },
+    { label: 'View in Stocks', icon: BarChart3, onClick: () => { setSymbol(state.symbol); navigate(`/stocks?symbol=${state.symbol}`) } },
     { divider: true },
     { label: 'Buy', icon: TrendingUp, kbd: '⇧B',
       onClick: () => { setSymbol(state.symbol); window.dispatchEvent(new CustomEvent('order-ticket:open', { detail: { side: 'buy' } })) } },

@@ -117,7 +117,7 @@ export default function SymbolHeader({ activePage }) {
 
   const up = (snap?.change ?? 0) >= 0
   const RESEARCH_LINKS = [
-    { id: 'stocks',       label: 'Quote',        icon: LineChart,   to: `/stocks?symbol=${symbol}` },
+    { id: 'stocks',       label: 'Stocks',       icon: LineChart,   to: `/stocks?symbol=${symbol}` },
     { id: 'analysis',     label: 'Analysis',     icon: Gauge,       to: `/analysis/${symbol}` },
     { id: 'fundamentals', label: 'Fundamentals', icon: Building2,   to: `/fundamentals/${symbol}` },
     { id: 'options',      label: 'Options',      icon: Layers,      to: `/options/${symbol}` },

@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Newspaper, RefreshCw, TrendingUp, TrendingDown, Activity, Bitcoin, DollarSign,
-  Calendar, ExternalLink, Search, Filter, Clock, Globe, Sparkles, Zap,
+  Calendar, ExternalLink, Search, Filter, Clock, Sparkles, Zap,
+  Layers, Flame, BarChart3,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSymbol } from '../lib/SymbolContext'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
 import {
   PageShell, PageHeader, Card, SectionHeader, IconButton, Input, Pill, SkeletonRows,
+  TabStrip,
 } from '../components/ui/primitives'
+import { MiniEquityCurve, MagBar } from '../components/ui/charts'
 import EmptyState from '../components/ui/EmptyState'
 
 // ── Macro tiles to show in the top strip ────────────────────────────
@@ -32,6 +35,22 @@ const CRYPTO_PROXIES = [
   { symbol: 'BTC/USD', label: 'Bitcoin'  },
   { symbol: 'ETH/USD', label: 'Ethereum' },
   { symbol: 'SOL/USD', label: 'Solana'   },
+]
+// SPDR sector ETFs — one liquid proxy per GICS sector. Webull's market page
+// leads with a sector-performance panel; these single snapshots give a clean
+// day-change read per sector without fetching dozens of constituents.
+const SECTOR_ETFS = [
+  { symbol: 'XLK',  label: 'Technology'      },
+  { symbol: 'XLC',  label: 'Communication'   },
+  { symbol: 'XLY',  label: 'Cons. Disc.'     },
+  { symbol: 'XLF',  label: 'Financials'      },
+  { symbol: 'XLV',  label: 'Health Care'     },
+  { symbol: 'XLI',  label: 'Industrials'     },
+  { symbol: 'XLP',  label: 'Cons. Staples'   },
+  { symbol: 'XLE',  label: 'Energy'          },
+  { symbol: 'XLU',  label: 'Utilities'       },
+  { symbol: 'XLRE', label: 'Real Estate'     },
+  { symbol: 'XLB',  label: 'Materials'       },
 ]
 const NEWS_PRESETS = [
   { id: 'all',     label: 'All news',    symbols: null },
@@ -164,6 +183,121 @@ function CryptoTile({ label, symbol, snap, onClick }) {
   )
 }
 
+// ── Index hero card — large card with last/chg + intraday sparkline ─
+function IndexHeroCard({ label, symbol, snap, spark, onClick }) {
+  const pct  = pctFromSnap(snap)
+  const last = lastFromSnap(snap)
+  const prev = snap?.prevDailyBar?.c
+  const chg  = (last != null && prev != null) ? last - prev : null
+  const up   = (pct ?? 0) >= 0
+  return (
+    <button
+      onClick={onClick}
+      className="group flex flex-col text-left rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.045] hover:border-accent/30 transition p-3.5 min-w-0"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-ink-1 truncate group-hover:text-accent transition-colors">{label}</div>
+          <div className="font-mono text-2xs text-ink-5 mt-0.5">{symbol}</div>
+        </div>
+        <span className={`shrink-0 inline-flex items-center gap-1 font-mono tabular text-xs font-semibold ${up ? 'text-up' : 'text-down'}`}>
+          {pct != null && (up ? <TrendingUp size={12} /> : <TrendingDown size={12} />)}
+          {pct != null ? `${up ? '+' : ''}${fmt(pct)}%` : '—'}
+        </span>
+      </div>
+      <div className="flex items-end justify-between gap-3 mt-2">
+        <div className="min-w-0">
+          <div className="font-mono tabular text-xl font-bold text-ink-1 leading-none">
+            {last != null ? fmt(last) : '—'}
+          </div>
+          <div className={`font-mono tabular text-2xs mt-1.5 ${up ? 'text-up' : 'text-down'}`}>
+            {chg != null ? `${up ? '+' : ''}${fmt(chg)}` : '—'}
+          </div>
+        </div>
+        <div className="w-24 h-10 shrink-0 self-center">
+          <MiniEquityCurve values={spark} height={40} />
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ── Sector performance row — label · magnitude bar · pct ───────────
+function SectorRow({ label, pct, onClick }) {
+  const up = (pct ?? 0) >= 0
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-white/[0.04] transition"
+    >
+      <span className="w-28 shrink-0 text-left text-xs text-ink-2 truncate">{label}</span>
+      <div className="flex-1 min-w-0"><MagBar value={pct} scale={3} height={6} /></div>
+      <span className={`w-16 shrink-0 text-right font-mono tabular text-xs font-semibold ${up ? 'text-up' : 'text-down'}`}>
+        {pct != null ? `${up ? '+' : ''}${fmt(pct)}%` : '—'}
+      </span>
+    </button>
+  )
+}
+
+// ── Market breadth gauge — advancing vs declining across a universe ─
+function BreadthGauge({ up, down, flat }) {
+  const total = up + down + flat || 1
+  const upW   = (up / total) * 100
+  const flatW = (flat / total) * 100
+  const downW = (down / total) * 100
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-mono tabular text-sm font-bold text-up">{up} ▲</span>
+        <span className="text-2xs text-ink-4 font-mono">{flat} flat</span>
+        <span className="font-mono tabular text-sm font-bold text-down">▼ {down}</span>
+      </div>
+      <div className="flex h-2 w-full rounded-full overflow-hidden bg-white/[0.04]">
+        <div className="bg-up"   style={{ width: `${upW}%` }} />
+        <div className="bg-ink-5 opacity-30" style={{ width: `${flatW}%` }} />
+        <div className="bg-down" style={{ width: `${downW}%` }} />
+      </div>
+    </div>
+  )
+}
+
+// ── Movers table — one row per symbol with chg-magnitude bar ───────
+function MoversTable({ rows, onSymbolClick, showVolume = false }) {
+  if (!rows?.length) {
+    return <div className="px-3 py-6 text-center text-xs text-ink-4">No data available.</div>
+  }
+  return (
+    <div className="divide-y divide-white/[0.04]">
+      {rows.map((m, i) => {
+        const pct = Number(m.percent_change ?? m.change_pct ?? 0)
+        const up  = pct >= 0
+        return (
+          <button
+            key={m.symbol}
+            onClick={() => onSymbolClick(m.symbol)}
+            className="w-full grid grid-cols-[1.2rem_1fr_auto] items-center gap-3 px-3 py-2 hover:bg-white/[0.04] transition text-left"
+          >
+            <span className="text-2xs font-mono text-ink-5 tabular">{i + 1}</span>
+            <div className="min-w-0">
+              <div className="font-mono font-semibold text-sm text-ink-1 truncate">{m.symbol}</div>
+              <div className="mt-1 w-24"><MagBar value={pct} scale={10} height={4} /></div>
+            </div>
+            <div className="text-right">
+              <div className="font-mono tabular text-sm text-ink-1">${fmt(m.price)}</div>
+              <div className={`font-mono tabular text-2xs font-semibold ${up ? 'text-up' : 'text-down'}`}>
+                {showVolume && m.volume != null
+                  ? <span className="text-ink-4 mr-1.5">{fmtBig(m.volume)}</span>
+                  : null}
+                {up ? '+' : ''}{fmt(pct)}%
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── News card ──────────────────────────────────────────────────────
 function NewsCard({ article, onSymbolClick }) {
   const s = scoreArticle(article)
@@ -227,38 +361,6 @@ function NewsCard({ article, onSymbolClick }) {
   )
 }
 
-// ── Compact movers panel (top 5 each side) ──────────────────────────
-function MoverList({ title, rows, icon: Icon, tone, onSymbolClick }) {
-  if (!rows?.length) return null
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon size={11} className={tone === 'up' ? 'text-up' : 'text-down'} />
-        <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">{title}</span>
-      </div>
-      <div className="space-y-0.5">
-        {rows.slice(0, 5).map((m) => {
-          const pct = Number(m.percent_change ?? m.change_pct ?? 0)
-          const up  = pct >= 0
-          return (
-            <button
-              key={m.symbol}
-              onClick={() => onSymbolClick(m.symbol)}
-              className="w-full flex items-center justify-between gap-3 px-2 py-1 rounded text-sm hover:bg-white/[0.04] transition"
-            >
-              <span className="font-mono font-semibold text-ink-1">{m.symbol}</span>
-              <span className="text-2xs text-ink-4 font-mono tabular">${fmt(m.price)}</span>
-              <span className={`font-mono tabular text-xs font-semibold ${up ? 'text-up' : 'text-down'}`}>
-                {up ? '+' : ''}{fmt(pct)}%
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 // ── Trending tickers — counted from news article references ────────
 function useTrendingTickers(articles, limit = 8) {
   return useMemo(() => {
@@ -283,6 +385,8 @@ export default function Market() {
 
   const [snapshots, setSnapshots]       = useState({})
   const [cryptoSnaps, setCryptoSnaps]   = useState({})
+  const [sparks, setSparks]             = useState({})   // symbol → array of closes
+  const [moverTab, setMoverTab]         = useState('gainers')
   const [articles, setArticles]         = useState([])
   const [movers, setMovers]             = useState({ gainers: [], losers: [] })
   const [mostActives, setMostActives]   = useState([])
@@ -305,10 +409,28 @@ export default function Market() {
 
   async function loadMacro() {
     try {
-      const indexSyms = [...INDEX_PROXIES, ...MACRO_PROXIES].map((x) => x.symbol)
-      const r = await api.getSnapshots(indexSyms.join(','))
+      const syms = [...INDEX_PROXIES, ...MACRO_PROXIES, ...SECTOR_ETFS].map((x) => x.symbol)
+      const r = await api.getSnapshots(syms.join(','))
       setSnapshots(r?.snapshots || {})
     } catch (e) { /* tolerate broker hiccups */ }
+  }
+
+  // Intraday-ish sparklines for the index hero cards. Daily closes over ~6 weeks
+  // give a clean trend line; fetched once per full refresh (not on the 30s tick).
+  async function loadSparks() {
+    try {
+      const results = await Promise.allSettled(
+        INDEX_PROXIES.map((x) => api.getOhlcv(x.symbol, 42, '1d'))
+      )
+      const next = {}
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled') {
+          const bars = res.value?.bars || []
+          if (bars.length >= 2) next[INDEX_PROXIES[i].symbol] = bars.map((b) => b.c)
+        }
+      })
+      setSparks((prev) => ({ ...prev, ...next }))
+    } catch (e) { /* */ }
   }
 
   async function loadCrypto() {
@@ -354,7 +476,7 @@ export default function Market() {
 
   async function loadAll() {
     setLoading(true); setError(null)
-    await Promise.allSettled([loadMacro(), loadCrypto(), loadNews(), loadMovers(), loadMostActives()])
+    await Promise.allSettled([loadMacro(), loadCrypto(), loadSparks(), loadNews(), loadMovers(), loadMostActives()])
     setUpdatedAt(new Date())
     setLoading(false)
   }
@@ -374,6 +496,34 @@ export default function Market() {
 
   // Trending tickers from current news set
   const trending = useTrendingTickers(articles)
+
+  // Sector performance — sorted best → worst by day change.
+  const sectorRows = useMemo(() => {
+    return SECTOR_ETFS
+      .map((s) => ({ ...s, pct: pctFromSnap(snapshots[s.symbol]) }))
+      .filter((s) => s.pct != null)
+      .sort((a, b) => b.pct - a.pct)
+  }, [snapshots])
+
+  // Market breadth across indices + macro + sectors (a broad-tape proxy).
+  const breadth = useMemo(() => {
+    let up = 0, down = 0, flat = 0
+    for (const snap of Object.values(snapshots)) {
+      const p = pctFromSnap(snap)
+      if (p == null) continue
+      if (p > 0.05) up++
+      else if (p < -0.05) down++
+      else flat++
+    }
+    return { up, down, flat }
+  }, [snapshots])
+
+  // Movers shown in the tabbed table.
+  const moverRows = useMemo(() => {
+    if (moverTab === 'gainers') return movers.gainers
+    if (moverTab === 'losers')  return movers.losers
+    return mostActives
+  }, [moverTab, movers, mostActives])
 
   // Client-side text filter applied to whatever set is loaded
   const filteredArticles = useMemo(() => {
@@ -415,44 +565,98 @@ export default function Market() {
         }
       />
 
-      {/* ── Macro Strip — indices ─────────────────────────────── */}
-      <Card className="p-3 mb-3">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <Globe size={11} className="text-accent" />
-          <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Indices</span>
-        </div>
-        <div className="flex gap-2 flex-wrap">
+      {/* ── Index hero cards + market breadth ─────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-3">
+        <div className="lg:col-span-9 grid grid-cols-2 xl:grid-cols-4 gap-3">
           {INDEX_PROXIES.map((x) => (
-            <MacroTile key={x.symbol} {...x} snap={snapshots[x.symbol]} onClick={() => openSymbol(x.symbol)} />
+            <IndexHeroCard
+              key={x.symbol}
+              {...x}
+              snap={snapshots[x.symbol]}
+              spark={sparks[x.symbol]}
+              onClick={() => openSymbol(x.symbol)}
+            />
           ))}
         </div>
-      </Card>
+        <Card className="lg:col-span-3 p-3.5 flex flex-col justify-center">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Activity size={11} className="text-accent" />
+            <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Market Breadth</span>
+          </div>
+          <BreadthGauge up={breadth.up} down={breadth.down} flat={breadth.flat} />
+          <div className="text-2xs text-ink-5 mt-2.5">Across indices, macro &amp; sector ETFs</div>
+        </Card>
+      </div>
 
-      {/* ── Commodities / Treasuries / FX ─────────────────────── */}
-      <Card className="p-3 mb-3">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <DollarSign size={11} className="text-accent" />
-          <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Commodities · Treasuries · FX</span>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {MACRO_PROXIES.map((x) => (
-            <MacroTile key={x.symbol} {...x} snap={snapshots[x.symbol]} onClick={() => openSymbol(x.symbol)} />
-          ))}
-        </div>
-      </Card>
+      {/* ── Commodities / FX + Crypto ─────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        <Card className="p-3">
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <DollarSign size={11} className="text-accent" />
+            <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Commodities · Treasuries · FX</span>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {MACRO_PROXIES.map((x) => (
+              <MacroTile key={x.symbol} {...x} snap={snapshots[x.symbol]} onClick={() => openSymbol(x.symbol)} />
+            ))}
+          </div>
+        </Card>
+        <Card className="p-3">
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <Bitcoin size={11} className="text-warn" />
+            <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Crypto</span>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {CRYPTO_PROXIES.map((x) => (
+              <CryptoTile key={x.symbol} {...x} snap={cryptoSnaps[x.symbol]} onClick={() => navigate('/crypto')} />
+            ))}
+          </div>
+        </Card>
+      </div>
 
-      {/* ── Crypto ─────────────────────────────────────────────── */}
-      <Card className="p-3 mb-3">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <Bitcoin size={11} className="text-warn" />
-          <span className="text-2xs uppercase tracking-[0.14em] text-ink-4 font-semibold">Crypto</span>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {CRYPTO_PROXIES.map((x) => (
-            <CryptoTile key={x.symbol} {...x} snap={cryptoSnaps[x.symbol]} onClick={() => navigate('/crypto')} />
-          ))}
-        </div>
-      </Card>
+      {/* ── Sector performance + tabbed movers ────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        <Card>
+          <SectionHeader icon={Layers} title="Sector Performance"
+            action={
+              <button onClick={() => navigate('/heatmap')} className="text-2xs text-ink-4 hover:text-accent transition">
+                Heatmap →
+              </button>
+            }
+          />
+          <div className="p-2">
+            {sectorRows.length === 0 ? (
+              <SkeletonRows count={6} cols={3} />
+            ) : (
+              sectorRows.map((s) => (
+                <SectorRow key={s.symbol} label={s.label} pct={s.pct} onClick={() => openSymbol(s.symbol)} />
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <SectionHeader icon={Flame} title="Movers"
+            action={
+              <button onClick={() => navigate('/movers')} className="text-2xs text-ink-4 hover:text-accent transition">
+                All →
+              </button>
+            }
+          />
+          <TabStrip
+            tabs={[
+              ['gainers', 'Gainers', TrendingUp],
+              ['losers',  'Losers',  TrendingDown],
+              ['actives', 'Active',  BarChart3],
+            ]}
+            active={moverTab}
+            onChange={setMoverTab}
+          />
+          <div className="max-h-[420px] overflow-y-auto">
+            <MoversTable rows={moverRows.slice(0, 12)} onSymbolClick={openSymbol} showVolume={moverTab === 'actives'} />
+          </div>
+        </Card>
+      </div>
 
       {/* ── Main grid: news + sidebar panels ───────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
@@ -563,41 +767,6 @@ export default function Market() {
                   >
                     <span className="font-mono font-semibold text-ink-1 text-sm">{t.symbol}</span>
                     <span className="text-2xs font-mono tabular text-ink-4">{t.count}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Movers panel */}
-          <Card>
-            <SectionHeader icon={Activity} title="Today's Movers"
-              action={
-                <button onClick={() => navigate('/movers')} className="text-2xs text-ink-4 hover:text-accent transition">
-                  All →
-                </button>
-              }
-            />
-            <div className="p-3 grid grid-cols-2 gap-4">
-              <MoverList title="Gainers" tone="up"   icon={TrendingUp}   rows={movers.gainers} onSymbolClick={openSymbol} />
-              <MoverList title="Losers"  tone="down" icon={TrendingDown} rows={movers.losers}  onSymbolClick={openSymbol} />
-            </div>
-          </Card>
-
-          {/* Most actives */}
-          {mostActives.length > 0 && (
-            <Card>
-              <SectionHeader icon={Zap} title="Most Active" />
-              <div className="p-3 space-y-0.5">
-                {mostActives.slice(0, 8).map((m) => (
-                  <button
-                    key={m.symbol}
-                    onClick={() => openSymbol(m.symbol)}
-                    className="w-full flex items-center justify-between gap-3 px-2 py-1 rounded text-sm hover:bg-white/[0.04] transition"
-                  >
-                    <span className="font-mono font-semibold text-ink-1">{m.symbol}</span>
-                    <span className="font-mono tabular text-2xs text-ink-4">{fmtBig(m.volume)}</span>
-                    <span className="font-mono tabular text-2xs text-ink-3">${fmt(m.price)}</span>
                   </button>
                 ))}
               </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bell, Check, AlertTriangle, AlertOctagon, Info } from 'lucide-react'
 import { api } from '../lib/api'
-import { useStore, selectAlerts } from '../lib/store'
+import { useStore, selectAlerts, selectAlertsLoaded } from '../lib/store'
 import {
   PageShell, PageHeader, Card, Select, IconButton, Pill, SkeletonRows,
 } from '../components/ui/primitives'
@@ -15,7 +15,7 @@ const SEVERITY_CFG = {
 
 export default function Alerts() {
   const allAlerts = useStore(selectAlerts)
-  const hasBoot = useStore((s) => s.alerts.length > 0 || s.wsLastMessage !== null)
+  const hasBoot = useStore(selectAlertsLoaded)
   const [filter, setFilter] = useState({ unack_only: false, severity: '' })
   const loading = !hasBoot && allAlerts.length === 0
 
