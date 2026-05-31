@@ -275,6 +275,82 @@ class XSAccelMomentumStrategy(CrossSectionalStrategy):
         return {s: w for s in ranked}
 
 
+class XSRegimeMomentumStrategy(CrossSectionalStrategy):
+    """Regime-gated cross-sectional momentum — hold top-N momentum names only
+    while the market (SPY) is above its long moving average; step fully to cash
+    in risk-off regimes. Aims to keep momentum's upside while cutting bear-market
+    drawdowns."""
+    name = "xs_regime_momentum"
+    description = "Momentum top-N, but cash when SPY is below its long MA (regime filter)"
+    required_bars = 110
+    default_params = {"lookback": 63, "top_n": 2, "rebalance_days": 21, "market": "SPY", "regime_ma": 100}
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        mkt = self.params["market"]; rm = int(self.params["regime_ma"])
+        if mkt in data:
+            c = data[mkt]["close"]
+            if len(c) >= rm and float(c.iloc[-1]) < float(c.rolling(rm).mean().iloc[-1]):
+                return {}  # risk-off → all cash
+        lb = int(self.params["lookback"]); topn = int(self.params["top_n"])
+        score = {}
+        for s, df in data.items():
+            cc = df["close"]
+            if len(cc) < lb + 1:
+                continue
+            base = float(cc.iloc[-lb - 1])
+            if base > 0:
+                r = float(cc.iloc[-1]) / base - 1.0
+                if r > 0:
+                    score[s] = r
+        ranked = sorted(score, key=lambda s: score[s], reverse=True)[:topn]
+        if not ranked:
+            return {}
+        w = 1.0 / len(ranked)
+        return {s: w for s in ranked}
+
+
+class XSAccelSharpeStrategy(CrossSectionalStrategy):
+    """Blend of acceleration and risk-adjusted momentum — z-score each across the
+    basket, sum, and hold the top-N positive-momentum names. Combines the two
+    signals that each held up out-of-sample."""
+    name = "xs_accel_sharpe"
+    description = "Cross-sectional blend of acceleration + risk-adjusted momentum"
+    required_bars = 90
+    default_params = {"lookback": 63, "accel_window": 21, "top_n": 2, "rebalance_days": 21}
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        import math
+        from statistics import mean, pstdev
+        lb = int(self.params["lookback"]); aw = int(self.params["accel_window"]); topn = int(self.params["top_n"])
+        sharpe, accel, mom = {}, {}, {}
+        for s, df in data.items():
+            c = df["close"]
+            if len(c) < max(lb, 2 * aw) + 1:
+                continue
+            base = float(c.iloc[-lb - 1])
+            if base <= 0:
+                continue
+            m = float(c.iloc[-1]) / base - 1.0
+            v = float(c.pct_change().iloc[-lb:].std()) * math.sqrt(252)
+            now = float(c.iloc[-1]); mid = float(c.iloc[-aw - 1]); old = float(c.iloc[-2 * aw - 1])
+            if v <= 0 or mid <= 0 or old <= 0:
+                continue
+            mom[s] = m
+            sharpe[s] = m / v
+            accel[s] = (now / mid - 1.0) - (mid / old - 1.0)
+        common = [s for s in sharpe if s in accel and mom[s] > 0]
+        if len(common) < 2:
+            return {}
+        def z(d):
+            vals = [d[s] for s in common]; mu = mean(vals); sd = pstdev(vals) or 1.0
+            return {s: (d[s] - mu) / sd for s in common}
+        zs, za = z(sharpe), z(accel)
+        score = {s: zs[s] + za[s] for s in common}
+        ranked = sorted(common, key=lambda s: score[s], reverse=True)[:topn]
+        w = 1.0 / len(ranked)
+        return {s: w for s in ranked}
+
+
 CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSMomentumStrategy.name:        XSMomentumStrategy,
     XSMultiFactorStrategy.name:     XSMultiFactorStrategy,
@@ -282,6 +358,8 @@ CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     RiskParityStrategy.name:        RiskParityStrategy,
     XSSharpeMomentumStrategy.name:  XSSharpeMomentumStrategy,
     XSAccelMomentumStrategy.name:   XSAccelMomentumStrategy,
+    XSRegimeMomentumStrategy.name:  XSRegimeMomentumStrategy,
+    XSAccelSharpeStrategy.name:     XSAccelSharpeStrategy,
 }
 
 
