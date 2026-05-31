@@ -11,6 +11,7 @@ from app.core.schemas import StrategyCreate, StrategyRead, StrategyUpdate
 from app.core.security import get_current_user
 from app.services.audit import audit
 from app.services.event_backtester import EVENT_REGISTRY, list_event_strategies
+from app.services.mm_backtester import MM_REGISTRY, list_mm_strategies
 from app.services.options_backtester import OPTIONS_REGISTRY, list_options_strategies
 from app.strategies.cross_sectional import CROSS_SECTIONAL_REGISTRY, list_xs_strategies
 from app.strategies.registry import STRATEGY_REGISTRY, list_strategies
@@ -20,13 +21,14 @@ router = APIRouter(prefix="/strategies", tags=["Strategies"])
 
 def _known_type(stype: str) -> bool:
     return (stype in STRATEGY_REGISTRY or stype in CROSS_SECTIONAL_REGISTRY
-            or stype in OPTIONS_REGISTRY or stype in EVENT_REGISTRY)
+            or stype in OPTIONS_REGISTRY or stype in EVENT_REGISTRY or stype in MM_REGISTRY)
 
 
 @router.get("/available")
 async def available() -> list[dict]:
-    """All strategy types: per-symbol, portfolio, options, and event-driven."""
-    return list_strategies() + list_xs_strategies() + list_options_strategies() + list_event_strategies()
+    """All strategy types: per-symbol, portfolio, options, event-driven, market-making."""
+    return (list_strategies() + list_xs_strategies() + list_options_strategies()
+            + list_event_strategies() + list_mm_strategies())
 
 
 @router.get("", response_model=list[StrategyRead])

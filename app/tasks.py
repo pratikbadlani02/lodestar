@@ -442,6 +442,20 @@ async def run_backtest(backtest_id: UUID) -> dict:
                 await _persist(res)
                 return {"status": "completed", "return_pct": float(bt.total_return_pct)}
 
+            # ── Market-making simulation (HFT research; single underlying) ──
+            from app.services.mm_backtester import MM_REGISTRY
+            if bt.strategy_type in MM_REGISTRY:
+                from app.services.mm_backtester import MarketMakingEngine
+                sym = bt.symbols[0]
+                await fetch_and_store_bars(db, symbol=sym, timeframe="1Day", start=bt.start_date - timedelta(days=60))
+                df = await get_bars_df(db, symbol=sym, timeframe="1d", start=bt.start_date, end=bt.end_date)
+                if len(df) < 30:
+                    bt.status = BacktestStatus.FAILED; bt.error = "Not enough data"; await db.commit(); return {"status": "failed"}
+                engine = MarketMakingEngine(bt.strategy_type, bt.params, bt.initial_capital)
+                res = await asyncio.to_thread(lambda: engine.run(sym, df))
+                await _persist(res)
+                return {"status": "completed", "return_pct": float(bt.total_return_pct)}
+
             all_trades: list = []
             combined_curve: list[dict] = []
             final_equities: list[float] = []
