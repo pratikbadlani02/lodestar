@@ -120,15 +120,18 @@ class MarketMakingEngine:
             day_pnls.append(pnl)
             equity_curve.append({"t": times.iloc[i].isoformat(), "equity": round(equity, 2)})
             if fills:
+                # A MM "trade" is a whole day's session, not a directional round
+                # trip — P/L is spread capture across `fills` fills, so entry==exit
+                # (the day's mark) to avoid implying a price move that isn't there.
+                mark = Decimal(str(round(float(close.iloc[i]), 4)))
                 trades.append({
                     "symbol": symbol, "side": "buy",
                     "entry_time": times.iloc[i].to_pydatetime(), "exit_time": times.iloc[i].to_pydatetime(),
-                    "entry_price": Decimal(str(round(float(close.iloc[i - 1]), 4))),
-                    "exit_price": Decimal(str(round(float(close.iloc[i]), 4))),
+                    "entry_price": mark, "exit_price": mark,
                     "qty": Decimal(str(fills)),
                     "pnl": Decimal(str(round(pnl, 2))),
                     "pnl_pct": Decimal(str(round(pnl / self.initial_capital * 100, 4))),
-                    "reason": f"MM session: {fills} fills",
+                    "reason": f"MM session @ ~{mark} — {fills} fills, spread P/L (non-directional)",
                 })
 
         total_return_pct = (equity / self.initial_capital - 1.0) * 100
