@@ -1,4 +1,4 @@
-"""Backtest API — create (async via Celery), list, get results, list trades."""
+"""Backtest API — create (async, in-process), list, get results, list trades."""
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException

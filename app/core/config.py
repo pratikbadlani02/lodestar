@@ -36,10 +36,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://quantuser:changeme@localhost/quantdb"
     database_url_sync: str = "postgresql+psycopg2://quantuser:changeme@localhost/quantdb"
 
-    # ── Redis / Celery ─────────────────────────────────────────
+    # ── Redis (control state + WebSocket pub/sub) ──────────────
     redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
 
     # ── Alpaca Brokerage ───────────────────────────────────────
     alpaca_api_key: str = ""

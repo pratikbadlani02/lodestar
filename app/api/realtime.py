@@ -34,7 +34,7 @@ async def alpaca_webhook(
 ) -> dict:
     """
     Alpaca webhook receiver.
-    Records event for async processing by Celery worker.
+    Persists the event and broadcasts order updates to connected dashboards.
     """
     payload = await request.json()
     event_type = payload.get("event", "unknown")
