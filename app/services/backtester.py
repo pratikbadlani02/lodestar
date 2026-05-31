@@ -43,6 +43,11 @@ class BacktestEngine:
         self.initial_capital = float(initial_capital)
         self.commission = commission_per_trade
         self.slippage = slippage_bps / 10_000.0
+        # Opt-in volatility targeting: if params carry `vol_target` (annualized
+        # %, e.g. 15), each long is sized so its trailing realized vol ≈ target
+        # — a risk-parity-style allocation. Absent → original all-in behavior.
+        vt = (params or {}).get("vol_target")
+        self.vol_target = float(vt) / 100.0 if vt else None
 
     def run(self, symbol: str, df: pd.DataFrame) -> dict[str, Any]:
         """
@@ -79,7 +84,14 @@ class BacktestEngine:
             if signal is not None:
                 if signal.signal == SignalType.BUY and position_qty == 0:
                     fill_price = fill_price_base * (1 + self.slippage)
-                    qty = math.floor((cash * 0.95) / fill_price)  # use 95% of cash
+                    frac = 0.95  # default: use 95% of cash
+                    if self.vol_target:
+                        rets = window["close"].pct_change().dropna()
+                        if len(rets) >= 20:
+                            rv = float(rets.iloc[-20:].std()) * math.sqrt(252)
+                            if rv > 0:
+                                frac = min(0.95, max(0.05, self.vol_target / rv))
+                    qty = math.floor((cash * frac) / fill_price)
                     if qty > 0:
                         cost = qty * fill_price + self.commission
                         cash -= cost

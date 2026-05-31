@@ -4,8 +4,10 @@ from app.strategies.base import BaseStrategy
 from app.strategies.bollinger_squeeze import BollingerSqueezeStrategy
 from app.strategies.donchian_breakout import DonchianBreakoutStrategy
 from app.strategies.keltner_breakout import KeltnerBreakoutStrategy
+from app.strategies.low_volatility import LowVolatilityStrategy
 from app.strategies.macd_crossover import MACDStrategy
 from app.strategies.momentum import MomentumStrategy
+from app.strategies.multi_factor import MultiFactorStrategy
 from app.strategies.pairs_trade import PairsTradeStrategy
 from app.strategies.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategies.sector_rotation import SectorRotationStrategy
@@ -25,6 +27,9 @@ STRATEGY_REGISTRY: dict[str, type[BaseStrategy]] = {
     DonchianBreakoutStrategy.name:   DonchianBreakoutStrategy,
     MomentumStrategy.name:           MomentumStrategy,
     KeltnerBreakoutStrategy.name:    KeltnerBreakoutStrategy,
+    # ── Institutional / factor additions ─────────────────────────
+    LowVolatilityStrategy.name:      LowVolatilityStrategy,
+    MultiFactorStrategy.name:        MultiFactorStrategy,
 }
 
 
