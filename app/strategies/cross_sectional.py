@@ -403,6 +403,48 @@ class XSVolManagedStrategy(CrossSectionalStrategy):
         return {s: base_w * scale for s in ranked}
 
 
+class XSAdaptiveAccelStrategy(CrossSectionalStrategy):
+    """All-weather acceleration — run the (bull-winning) acceleration signal at
+    full exposure when the market (SPY) is in an uptrend, and dial exposure down
+    (to cash or a reduced fraction) when SPY is below its long MA. Combines the
+    bull-regime profit champion with bear-market protection."""
+    name = "xs_adaptive_accel"
+    description = "Regime-adaptive acceleration — full in risk-on, defensive in risk-off"
+    required_bars = 110
+    default_params = {
+        "accel_window": 21, "top_n": 1, "rebalance_days": 21,
+        "market": "SPY", "regime_ma": 100, "risk_off_scale": 0.0,
+    }
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        mkt = self.params["market"]; rm = int(self.params["regime_ma"])
+        aw = int(self.params["accel_window"]); topn = int(self.params["top_n"])
+        off_scale = float(self.params["risk_off_scale"])
+        risk_on = True
+        if mkt in data:
+            c = data[mkt]["close"]
+            if len(c) >= rm and float(c.iloc[-1]) < float(c.rolling(rm).mean().iloc[-1]):
+                risk_on = False
+        if not risk_on and off_scale <= 0:
+            return {}  # risk-off → cash
+        score = {}
+        for s, df in data.items():
+            c = df["close"]
+            if len(c) < 2 * aw + 1:
+                continue
+            now = float(c.iloc[-1]); mid = float(c.iloc[-aw - 1]); old = float(c.iloc[-2 * aw - 1])
+            if mid <= 0 or old <= 0:
+                continue
+            recent = now / mid - 1.0; prior = mid / old - 1.0
+            if recent > 0 and (recent - prior) > 0:
+                score[s] = recent - prior
+        ranked = sorted(score, key=lambda s: score[s], reverse=True)[:topn]
+        if not ranked:
+            return {}
+        w = (1.0 / len(ranked)) * (1.0 if risk_on else off_scale)
+        return {s: w for s in ranked}
+
+
 CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSMomentumStrategy.name:        XSMomentumStrategy,
     XSMultiFactorStrategy.name:     XSMultiFactorStrategy,
@@ -413,6 +455,7 @@ CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSRegimeMomentumStrategy.name:  XSRegimeMomentumStrategy,
     XSAccelSharpeStrategy.name:     XSAccelSharpeStrategy,
     XSVolManagedStrategy.name:      XSVolManagedStrategy,
+    XSAdaptiveAccelStrategy.name:   XSAdaptiveAccelStrategy,
 }
 
 
