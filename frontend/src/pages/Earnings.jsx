@@ -1,12 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calendar, RefreshCw, Filter as FilterIcon } from 'lucide-react'
+import { Calendar, RefreshCw, Filter as FilterIcon, Layers } from 'lucide-react'
 import { api } from '../lib/api'
 import { Card } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
-
 const DEFAULT_SYMBOLS = 'AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,NFLX,AMD,AVGO,JPM,XOM,WMT,UNH,V'
+
+// One-click universe presets so you don't have to type tickers. Sector groups
+// are kept modest because the backend fetches each symbol's calendar
+// sequentially; "All majors" is the deduped union of the groups (~80 names),
+// broad but still responsive.
+const GROUPS = {
+  mega:     DEFAULT_SYMBOLS,
+  tech:     'AAPL,MSFT,NVDA,AVGO,ORCL,CRM,ADBE,AMD,INTC,CSCO,QCOM,TXN,NOW,INTU,MU,PLTR,SNOW,CRWD,PANW,SMCI',
+  fin:      'JPM,BAC,WFC,GS,MS,C,BLK,AXP,SCHW,V,MA,PYPL,COF,USB,PNC,SPGI',
+  health:   'UNH,JNJ,LLY,PFE,ABBV,MRK,TMO,ABT,DHR,BMY,AMGN,GILD,CVS,MDT,ISRG,VRTX',
+  consumer: 'AMZN,TSLA,HD,MCD,NKE,SBUX,LOW,TGT,COST,WMT,PG,KO,PEP,CMG,LULU,DIS',
+  energy:   'XOM,CVX,COP,SLB,EOG,PSX,MPC,OXY',
+}
+const ALL_MAJORS = Array.from(new Set(Object.values(GROUPS).join(',').split(','))).join(',')
+
+const PRESETS = [
+  ['mega',     'Megacap',    GROUPS.mega],
+  ['tech',     'Tech',       GROUPS.tech],
+  ['fin',      'Financials', GROUPS.fin],
+  ['health',   'Healthcare', GROUPS.health],
+  ['consumer', 'Consumer',   GROUPS.consumer],
+  ['energy',   'Energy',     GROUPS.energy],
+  ['all',      'All majors', ALL_MAJORS],
+]
 
 const fmtDate = (s) => {
   if (!s) return '—'
@@ -120,6 +143,12 @@ export default function Earnings() {
     setSymbols(symbolsInput.toUpperCase().replace(/\s+/g, ''))
   }
 
+  function applyPreset(value) {
+    setSelected('')
+    setSymbolsInput(value)
+    setSymbols(value)
+  }
+
   // Annotate each row with days + bucket
   const enriched = useMemo(() => rows.map((r) => {
     const d = daysFromToday(r.earnings_date)
@@ -191,6 +220,30 @@ export default function Earnings() {
           <option value="">— From watchlist —</option>
           {watchlists.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
+      </div>
+
+      {/* Universe presets — one click to populate a broad calendar */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Layers size={12} className="text-ink-4" />
+        {PRESETS.map(([id, label, value]) => {
+          const active = symbols === value
+          const count = value.split(',').length
+          return (
+            <button
+              key={id}
+              onClick={() => applyPreset(value)}
+              title={`${count} symbols`}
+              className={`px-2.5 py-1 rounded-lg text-2xs font-medium uppercase tracking-wider transition border ${
+                active
+                  ? 'bg-accent/15 border-accent/40 text-accent'
+                  : 'bg-white/[0.03] border-white/[0.06] text-ink-3 hover:text-ink-1 hover:bg-white/[0.06]'
+              }`}
+            >
+              {label}
+              {id === 'all' && <span className="ml-1 opacity-70 font-mono">{count}</span>}
+            </button>
+          )
+        })}
       </div>
 
       {/* Filter chips */}

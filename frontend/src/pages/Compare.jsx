@@ -1,9 +1,76 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { GitCompare, X, Radar } from 'lucide-react'
+import { GitCompare, X, Radar, Search } from 'lucide-react'
 import { api } from '../lib/api'
 import { Card, SectionHeader, PageShell, PageHeader } from '../components/ui/primitives'
 import { RadarCompare } from '../components/ui/charts'
+import { searchSymbols, typeLabel } from '../lib/symbolDirectory'
+
+// ── Symbol search box with ticker/company-name autocomplete ────────
+function AddSymbolSearch({ exclude, disabled, onAdd }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const [hi, setHi] = useState(0)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+  useEffect(() => { setHi(0) }, [q])
+
+  const results = useMemo(() => {
+    if (!q.trim()) return []
+    const ex = new Set(exclude.map((s) => s.toUpperCase()))
+    return searchSymbols(q, 8).filter((r) => !ex.has(r.s))
+  }, [q, exclude])
+
+  function choose(s) {
+    const v = String(s || '').trim().toUpperCase()
+    if (!v) return
+    onAdd(v)
+    setQ(''); setOpen(false)
+  }
+  function onKey(e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((i) => Math.min(i + 1, results.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((i) => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(results[hi]?.s || q) }
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className={`flex items-center gap-2 bg-surf-1 border border-surf-3 focus-within:border-accent/50 rounded-lg px-2.5 py-1.5 ${disabled ? 'opacity-40' : ''}`}>
+        <Search size={13} className="text-ink-4" />
+        <input
+          value={q}
+          disabled={disabled}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+          onKeyDown={onKey}
+          placeholder={disabled ? 'Max 6 symbols' : 'Add symbol or company…'}
+          className="bg-transparent outline-none text-sm w-44 placeholder:text-ink-5"
+        />
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute top-full mt-1 left-0 w-72 max-w-[88vw] card-surface shadow-2xl z-40 max-h-80 overflow-y-auto p-1">
+          {results.map((r, i) => (
+            <button
+              key={r.s}
+              onMouseEnter={() => setHi(i)}
+              onClick={() => choose(r.s)}
+              className={`w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-md transition ${i === hi ? 'bg-accent/10' : 'hover:bg-white/[0.04]'}`}
+            >
+              <span className="font-mono font-semibold text-xs text-ink-1 shrink-0 w-16 truncate">{r.s}</span>
+              <span className="text-2xs text-ink-3 truncate flex-1">{r.n}</span>
+              <span className="text-[10px] text-ink-5 uppercase tracking-wider shrink-0">{typeLabel(r.t)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Palette for radar polygons — one per symbol slot, looping if more
 const SERIES_COLORS = ['#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185']
@@ -83,7 +150,6 @@ export default function Compare() {
   const initial = (params.get('symbols') || 'AAPL,MSFT,GOOGL').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
   const [symbols, setSymbols] = useState(initial)
   const [profiles, setProfiles] = useState({})
-  const [addInput, setAddInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -111,12 +177,9 @@ export default function Compare() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(symbols)])
 
-  function add(e) {
-    e.preventDefault()
-    const s = addInput.trim().toUpperCase()
+  function add(s) {
     if (!s || symbols.includes(s) || symbols.length >= 6) return
     setSymbols([...symbols, s])
-    setAddInput('')
   }
   function remove(s) {
     setSymbols(symbols.filter((x) => x !== s))
@@ -158,22 +221,7 @@ export default function Compare() {
             </button>
           </span>
         ))}
-        <form onSubmit={add} className="flex items-center gap-2">
-          <input
-            value={addInput}
-            onChange={(e) => setAddInput(e.target.value)}
-            placeholder={symbols.length >= 6 ? 'Max 6 symbols' : 'Add symbol…'}
-            disabled={symbols.length >= 6}
-            className="bg-surf-1 border border-surf-3 rounded-lg px-3 py-1.5 text-sm font-mono uppercase w-32 disabled:opacity-40"
-          />
-          <button
-            type="submit"
-            disabled={symbols.length >= 6}
-            className="bg-up hover:bg-up text-[#fff] text-sm rounded-lg px-3 py-1.5 disabled:opacity-40"
-          >
-            Add
-          </button>
-        </form>
+        <AddSymbolSearch exclude={symbols} disabled={symbols.length >= 6} onAdd={add} />
       </div>
 
       {error && (
