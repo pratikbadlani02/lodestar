@@ -456,6 +456,26 @@ async def run_backtest(backtest_id: UUID) -> dict:
                 await _persist(res)
                 return {"status": "completed", "return_pct": float(bt.total_return_pct)}
 
+            # ── Multi-symbol regular strategies: shared-capital portfolio ──
+            # One cash pool across tickers (buying one doesn't require selling
+            # another; freed cash is redeployed). Single-symbol keeps the
+            # original isolated path below for backward compatibility.
+            from app.strategies.registry import STRATEGY_REGISTRY as _REG
+            if bt.strategy_type in _REG and len(bt.symbols) > 1:
+                from app.services.signal_portfolio_backtester import SignalPortfolioEngine
+                data: dict = {}
+                for symbol in bt.symbols:
+                    await fetch_and_store_bars(db, symbol=symbol, timeframe="1Day", start=bt.start_date - timedelta(days=60))
+                    sdf = await get_bars_df(db, symbol=symbol, timeframe="1d", start=bt.start_date, end=bt.end_date)
+                    if len(sdf) >= 50:
+                        data[symbol] = sdf
+                if len(data) < 2:
+                    bt.status = BacktestStatus.FAILED; bt.error = "Need ≥2 symbols with data"; await db.commit(); return {"status": "failed"}
+                engine = SignalPortfolioEngine(bt.strategy_type, bt.params, bt.initial_capital)
+                res = await asyncio.to_thread(lambda: engine.run(data))
+                await _persist(res)
+                return {"status": "completed", "return_pct": float(bt.total_return_pct)}
+
             all_trades: list = []
             combined_curve: list[dict] = []
             final_equities: list[float] = []

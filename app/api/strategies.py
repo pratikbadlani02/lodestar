@@ -97,6 +97,14 @@ async def update(
     if "symbols" in data:
         data["symbols"] = [sym.upper() for sym in data["symbols"]]
 
+    # Only one strategy may be live at a time: activating one pauses the rest.
+    if data.get("status") == StrategyStatus.ACTIVE:
+        others = (await db.execute(
+            select(Strategy).where(Strategy.id != strategy_id, Strategy.status == StrategyStatus.ACTIVE)
+        )).scalars().all()
+        for o in others:
+            o.status = StrategyStatus.PAUSED
+
     for k, v in data.items():
         setattr(s, k, v)
 
