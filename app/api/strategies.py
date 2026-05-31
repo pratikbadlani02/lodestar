@@ -10,7 +10,7 @@ from app.core.models import Strategy, StrategyStatus
 from app.core.schemas import StrategyCreate, StrategyRead, StrategyUpdate
 from app.core.security import get_current_user
 from app.services.audit import audit
-from app.strategies.cross_sectional import list_xs_strategies
+from app.strategies.cross_sectional import CROSS_SECTIONAL_REGISTRY, list_xs_strategies
 from app.strategies.registry import STRATEGY_REGISTRY, list_strategies
 
 router = APIRouter(prefix="/strategies", tags=["Strategies"])
@@ -37,10 +37,11 @@ async def create(
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_current_user),
 ) -> Strategy:
-    if payload.strategy_type not in STRATEGY_REGISTRY:
+    if payload.strategy_type not in STRATEGY_REGISTRY and payload.strategy_type not in CROSS_SECTIONAL_REGISTRY:
+        known = list(STRATEGY_REGISTRY.keys()) + list(CROSS_SECTIONAL_REGISTRY.keys())
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown strategy_type. Available: {list(STRATEGY_REGISTRY.keys())}",
+            detail=f"Unknown strategy_type. Available: {known}",
         )
 
     strategy = Strategy(
