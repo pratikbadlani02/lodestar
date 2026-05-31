@@ -2,11 +2,15 @@
 from app.strategies.atr_breakout import ATRBreakoutStrategy
 from app.strategies.base import BaseStrategy
 from app.strategies.bollinger_squeeze import BollingerSqueezeStrategy
+from app.strategies.donchian_breakout import DonchianBreakoutStrategy
+from app.strategies.keltner_breakout import KeltnerBreakoutStrategy
 from app.strategies.macd_crossover import MACDStrategy
+from app.strategies.momentum import MomentumStrategy
 from app.strategies.pairs_trade import PairsTradeStrategy
 from app.strategies.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategies.sector_rotation import SectorRotationStrategy
 from app.strategies.sma_crossover import SMACrossoverStrategy
+from app.strategies.supertrend import SupertrendStrategy
 
 STRATEGY_REGISTRY: dict[str, type[BaseStrategy]] = {
     SMACrossoverStrategy.name:       SMACrossoverStrategy,
@@ -16,6 +20,11 @@ STRATEGY_REGISTRY: dict[str, type[BaseStrategy]] = {
     BollingerSqueezeStrategy.name:   BollingerSqueezeStrategy,
     SectorRotationStrategy.name:     SectorRotationStrategy,
     PairsTradeStrategy.name:         PairsTradeStrategy,
+    # ── Bot-grade additions ──────────────────────────────────────
+    SupertrendStrategy.name:         SupertrendStrategy,
+    DonchianBreakoutStrategy.name:   DonchianBreakoutStrategy,
+    MomentumStrategy.name:           MomentumStrategy,
+    KeltnerBreakoutStrategy.name:    KeltnerBreakoutStrategy,
 }
 
 
