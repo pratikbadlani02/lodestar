@@ -10,6 +10,7 @@ from app.core.models import Strategy, StrategyStatus
 from app.core.schemas import StrategyCreate, StrategyRead, StrategyUpdate
 from app.core.security import get_current_user
 from app.services.audit import audit
+from app.strategies.cross_sectional import list_xs_strategies
 from app.strategies.registry import STRATEGY_REGISTRY, list_strategies
 
 router = APIRouter(prefix="/strategies", tags=["Strategies"])
@@ -17,8 +18,8 @@ router = APIRouter(prefix="/strategies", tags=["Strategies"])
 
 @router.get("/available")
 async def available() -> list[dict]:
-    """List all registered strategy types with their default params."""
-    return list_strategies()
+    """List all registered strategy types (per-symbol + portfolio) with defaults."""
+    return list_strategies() + list_xs_strategies()
 
 
 @router.get("", response_model=list[StrategyRead])

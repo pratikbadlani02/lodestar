@@ -350,6 +350,50 @@ async def run_backtest(backtest_id: UUID) -> dict:
         await db.commit()
 
         try:
+            # ── Cross-sectional (portfolio) strategies: separate engine that
+            #    ranks the whole basket and rotates capital (true sector rotation).
+            from app.strategies.cross_sectional import CROSS_SECTIONAL_REGISTRY
+            if bt.strategy_type in CROSS_SECTIONAL_REGISTRY:
+                from app.services.portfolio_backtester import PortfolioBacktestEngine
+                data: dict = {}
+                for symbol in bt.symbols:
+                    await fetch_and_store_bars(
+                        db, symbol=symbol, timeframe="1Day",
+                        start=bt.start_date - timedelta(days=60),
+                    )
+                    df = await get_bars_df(
+                        db, symbol=symbol, timeframe="1d",
+                        start=bt.start_date, end=bt.end_date,
+                    )
+                    if len(df) >= 50:
+                        data[symbol] = df
+                if len(data) < 2:
+                    bt.status = BacktestStatus.FAILED
+                    bt.error = "Cross-sectional backtest needs ≥2 symbols with data"
+                    await db.commit()
+                    return {"status": "failed"}
+
+                engine = PortfolioBacktestEngine(bt.strategy_type, bt.params, bt.initial_capital)
+                res = await asyncio.to_thread(lambda: engine.run(data))
+                for t in res["trades"]:
+                    db.add(BacktestTrade(backtest_id=bt.id, **t))
+                bt.status = BacktestStatus.COMPLETED
+                bt.final_equity = res["final_equity"]
+                bt.total_return_pct = res["total_return_pct"]
+                bt.sharpe_ratio = res["sharpe_ratio"]
+                bt.max_drawdown_pct = res["max_drawdown_pct"]
+                bt.win_rate_pct = res["win_rate_pct"]
+                bt.total_trades = res["total_trades"]
+                bt.equity_curve = res["equity_curve"][:5000]
+                bt.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+                await ws_emit("backtest_completed", {
+                    "id": str(bt.id),
+                    "return_pct": float(bt.total_return_pct),
+                    "trades": bt.total_trades,
+                })
+                return {"status": "completed", "return_pct": float(bt.total_return_pct)}
+
             all_trades: list = []
             combined_curve: list[dict] = []
             final_equities: list[float] = []
