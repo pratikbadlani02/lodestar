@@ -351,6 +351,58 @@ class XSAccelSharpeStrategy(CrossSectionalStrategy):
         return {s: w for s in ranked}
 
 
+class XSVolManagedStrategy(CrossSectionalStrategy):
+    """Volatility-managed momentum (Barroso & Santa-Clara). Rank by the chosen
+    signal — acceleration or level momentum — hold top-N, then scale TOTAL
+    exposure so the portfolio targets a constant volatility: full when calm,
+    partly cash when volatile. Historically improves momentum's return and
+    Sharpe by sidestepping high-vol 'momentum crashes'."""
+    name = "xs_volmanaged"
+    description = "Volatility-managed momentum/acceleration (target-vol exposure, top-N)"
+    required_bars = 90
+    default_params = {
+        "lookback": 63, "accel_window": 21, "top_n": 3, "rebalance_days": 21,
+        "target_vol": 20.0, "signal": "accel",  # "accel" | "momentum"
+    }
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        import math
+        lb = int(self.params["lookback"]); aw = int(self.params["accel_window"])
+        topn = int(self.params["top_n"]); tv = float(self.params["target_vol"])
+        sig = str(self.params["signal"])
+        score, vol = {}, {}
+        for s, df in data.items():
+            c = df["close"]
+            need = max(lb, 2 * aw) + 1
+            if len(c) < need:
+                continue
+            base = float(c.iloc[-lb - 1])
+            if base <= 0:
+                continue
+            v = float(c.pct_change().iloc[-lb:].std()) * math.sqrt(252)
+            if v <= 0:
+                continue
+            vol[s] = v
+            if sig == "momentum":
+                m = float(c.iloc[-1]) / base - 1.0
+                if m > 0:
+                    score[s] = m
+            else:  # acceleration
+                now = float(c.iloc[-1]); mid = float(c.iloc[-aw - 1]); old = float(c.iloc[-2 * aw - 1])
+                if mid > 0 and old > 0:
+                    recent = now / mid - 1.0; prior = mid / old - 1.0
+                    if recent > 0 and (recent - prior) > 0:
+                        score[s] = recent - prior
+        ranked = sorted(score, key=lambda s: score[s], reverse=True)[:topn]
+        if not ranked:
+            return {}
+        base_w = 1.0 / len(ranked)
+        # Conservative portfolio vol estimate (weighted avg ≈ high correlation).
+        port_vol = sum(base_w * vol[s] for s in ranked)
+        scale = min(1.0, (tv / 100.0) / port_vol) if port_vol > 0 else 1.0
+        return {s: base_w * scale for s in ranked}
+
+
 CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSMomentumStrategy.name:        XSMomentumStrategy,
     XSMultiFactorStrategy.name:     XSMultiFactorStrategy,
@@ -360,6 +412,7 @@ CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSAccelMomentumStrategy.name:   XSAccelMomentumStrategy,
     XSRegimeMomentumStrategy.name:  XSRegimeMomentumStrategy,
     XSAccelSharpeStrategy.name:     XSAccelSharpeStrategy,
+    XSVolManagedStrategy.name:      XSVolManagedStrategy,
 }
 
 
