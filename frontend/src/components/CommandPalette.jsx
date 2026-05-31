@@ -12,6 +12,7 @@ import {
 import { useSymbol } from '../lib/SymbolContext'
 import { useTheme } from '../lib/ThemeContext'
 import { api } from '../lib/api'
+import { searchSymbols, nameFor } from '../lib/symbolDirectory'
 
 const ROUTES = [
   { label: 'Workspace',       path: '/',              icon: LayoutGrid, kw: 'home dashboard' },
@@ -106,17 +107,31 @@ export default function CommandPalette() {
     const sections = []
     const isTicker = /^[A-Za-z]{1,6}([.\-/][A-Za-z]{1,6})?$/.test(q.trim())
 
-    // Symbols section
-    const symPool = Array.from(new Set([...(recents || []), ...railSymbols]))
-    const symMatches = symPool
-      .map((s) => ({ s, score: fuzzy(q, s) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
-      .map((x) => ({ kind: 'symbol', value: x.s, label: x.s }))
-    // If literal ticker not in pool, add it as a "Go to" entry
-    if (isTicker && !symPool.includes(q.trim().toUpperCase())) {
-      symMatches.unshift({ kind: 'symbol', value: q.trim().toUpperCase(), label: q.trim().toUpperCase(), hint: 'open analysis' })
+    // Symbols section — searches the bundled directory (ticker OR company name),
+    // with recents/watchlist boosted to the top. Falls back to a "Go to" entry
+    // for any literal ticker not in the directory.
+    const knownPool = Array.from(new Set([...(recents || []), ...railSymbols]))
+    let symMatches = []
+    if (!q) {
+      symMatches = knownPool.slice(0, 7).map((s) => ({ kind: 'symbol', value: s, label: s, hint: nameFor(s) || '' }))
+    } else {
+      symMatches = searchSymbols(q, 8, knownPool)
+        .map((d) => ({ kind: 'symbol', value: d.s, label: d.s, hint: d.n }))
+      // Include recents/watchlist matches that aren't in the directory.
+      const present = new Set(symMatches.map((i) => i.value))
+      for (const s of knownPool) {
+        if (!present.has(s) && fuzzy(q, s) > 0) {
+          symMatches.push({ kind: 'symbol', value: s, label: s, hint: nameFor(s) || '' })
+          present.add(s)
+        }
+      }
+      // "Go to TICKER" only as a fallback when nothing else matched — otherwise
+      // a typed company name (e.g. "nvidia") would spawn a bogus ticker entry.
+      const qu = q.trim().toUpperCase()
+      if (isTicker && !present.has(qu) && symMatches.length === 0) {
+        symMatches.unshift({ kind: 'symbol', value: qu, label: qu, hint: 'open analysis' })
+      }
+      symMatches = symMatches.slice(0, 8)
     }
     if (symMatches.length) sections.push({ title: 'Symbols', items: symMatches })
 

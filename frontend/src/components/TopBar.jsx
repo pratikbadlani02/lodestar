@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, X, Clock, ArrowUpRight, ArrowDownRight, Sun, Moon, Rows3, Rows2, Rows4, Menu } from 'lucide-react'
 import { useSymbol } from '../lib/SymbolContext'
@@ -6,6 +6,7 @@ import { useTheme } from '../lib/ThemeContext'
 import { useDensity } from '../lib/DensityContext'
 import { api } from '../lib/api'
 import { fmt, fmtSigned, fmtSignedPct } from './ui/format'
+import { searchSymbols, nameFor, typeLabel } from '../lib/symbolDirectory'
 
 function useClickOutside(ref, onOutside) {
   useEffect(() => {
@@ -25,8 +26,20 @@ export default function TopBar({ onMenuOpen }) {
   const [input, setInput] = useState('')
   const [snap, setSnap] = useState(null)
   const [open, setOpen] = useState(false)
+  const [hi, setHi] = useState(0)   // highlighted suggestion index
   const wrapRef = useRef(null)
   useClickOutside(wrapRef, () => setOpen(false))
+
+  // Live suggestions: directory search (ticker OR company name) when typing,
+  // boosted by recents; recents list when the box is empty.
+  const suggestions = useMemo(() => {
+    if (input.trim()) {
+      return searchSymbols(input, 8, recents).map((d) => ({ s: d.s, n: d.n, t: d.t }))
+    }
+    return (recents || []).slice(0, 8).map((s) => ({ s, n: nameFor(s) || '', t: null }))
+  }, [input, recents])
+
+  useEffect(() => { setHi(0) }, [input])
 
   useEffect(() => {
     let cancelled = false
@@ -75,7 +88,14 @@ export default function TopBar({ onMenuOpen }) {
 
   function onSubmit(e) {
     e.preventDefault()
-    commit()
+    // Prefer the highlighted suggestion; otherwise commit the raw input.
+    commit(suggestions[hi]?.s || input)
+  }
+
+  function onSearchKeyDown(e) {
+    if (!open || !suggestions.length) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((i) => Math.min(i + 1, suggestions.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((i) => Math.max(i - 1, 0)) }
   }
 
   const up = (snap?.change ?? 0) >= 0
@@ -100,32 +120,50 @@ export default function TopBar({ onMenuOpen }) {
           <input
             value={input}
             onFocus={() => setOpen(true)}
-            onChange={(e) => setInput(e.target.value.toUpperCase())}
-            placeholder="Search…"
-            className="bg-transparent outline-none text-xs font-mono uppercase w-20 sm:w-32 placeholder:text-ink-5 placeholder:normal-case tracking-wide"
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            placeholder="Search symbol or company…"
+            className="bg-transparent outline-none text-xs font-mono uppercase w-20 sm:w-40 placeholder:text-ink-5 placeholder:normal-case placeholder:font-sans tracking-wide"
           />
           <kbd className="hidden sm:inline-block text-[10px] text-ink-5 bg-white/[0.04] border border-white/[0.06] rounded px-1 py-0.5 font-mono">⏎</kbd>
         </form>
-        {open && recents.length > 0 && (
-          <div className="absolute top-full mt-2 left-0 w-64 card-surface shadow-2xl z-40 max-h-80 overflow-y-auto p-1">
-            <div className="px-2 py-1.5 text-2xs uppercase tracking-[0.14em] text-ink-4 flex items-center gap-1.5">
-              <Clock size={10} /> Recent
-            </div>
-            {recents
-              .filter((r) => !input || r.includes(input))
-              .map((r) => (
-                <div key={r} className="group flex items-center rounded-md hover:bg-accent/10 transition-colors">
-                  <button onClick={() => commit(r)} className="flex-1 text-left px-2.5 py-1.5 text-xs font-mono font-semibold text-ink-1">
-                    {r}
+        {open && suggestions.length > 0 && (
+          <div className="absolute top-full mt-2 left-0 w-80 max-w-[88vw] card-surface shadow-2xl z-40 max-h-96 overflow-y-auto p-1">
+            {!input.trim() && (
+              <div className="px-2 py-1.5 text-2xs uppercase tracking-[0.14em] text-ink-4 flex items-center gap-1.5">
+                <Clock size={10} /> Recent
+              </div>
+            )}
+            {suggestions.map((it, i) => {
+              const isRecent = !input.trim()
+              return (
+                <div
+                  key={it.s}
+                  onMouseEnter={() => setHi(i)}
+                  className={`group flex items-center rounded-md transition-colors ${i === hi ? 'bg-accent/10' : 'hover:bg-white/[0.04]'}`}
+                >
+                  <button onClick={() => commit(it.s)} className="flex-1 min-w-0 flex items-center gap-2.5 text-left px-2.5 py-1.5">
+                    <span className="font-mono font-semibold text-xs text-ink-1 shrink-0 w-16 truncate">{it.s}</span>
+                    {it.n && <span className="text-2xs text-ink-3 truncate flex-1">{it.n}</span>}
+                    {it.t && <span className="text-[10px] text-ink-5 uppercase tracking-wider shrink-0">{typeLabel(it.t)}</span>}
                   </button>
-                  <button
-                    onClick={() => removeRecent(r)}
-                    className="px-2 opacity-0 group-hover:opacity-100 text-ink-4 hover:text-down transition"
-                  >
-                    <X size={12} />
-                  </button>
+                  {isRecent && (
+                    <button
+                      onClick={() => removeRecent(it.s)}
+                      className="px-2 opacity-0 group-hover:opacity-100 text-ink-4 hover:text-down transition"
+                      title="Remove"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                 </div>
-              ))}
+              )
+            })}
+            {input.trim() && (
+              <div className="px-2.5 py-1.5 mt-0.5 border-t border-white/[0.06] text-2xs text-ink-5">
+                Press <kbd className="font-mono text-ink-4">⏎</kbd> to open {suggestions[hi]?.s || input.toUpperCase()}
+              </div>
+            )}
           </div>
         )}
       </div>
