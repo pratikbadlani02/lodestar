@@ -24,6 +24,7 @@ class CrossSectionalStrategy(ABC):
     required_bars: int = 70
     default_params: dict[str, Any] = {}
     is_portfolio: bool = True
+    long_short: bool = False   # may return negative (short) weights
 
     def __init__(self, params: dict[str, Any] | None = None):
         self.params = {**self.default_params, **(params or {})}
@@ -127,9 +128,48 @@ class XSMultiFactorStrategy(CrossSectionalStrategy):
         return {s: w for s in ranked}
 
 
+class XSLongShortStrategy(CrossSectionalStrategy):
+    """Market-neutral momentum: long the top-N by momentum, short the bottom-N,
+    dollar-neutral (longs and shorts each get half the gross budget). Isolates
+    the cross-sectional spread between winners and losers, hedging market beta."""
+    name = "xs_long_short"
+    description = "Market-neutral momentum — long top-N, short bottom-N (dollar-neutral)"
+    required_bars = 70
+    long_short = True
+    default_params = {
+        "lookback": 63,
+        "top_n": 2,             # per side
+        "rebalance_days": 21,
+        "gross": 1.0,           # total gross exposure (0.5 long + 0.5 short)
+    }
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        lb = int(self.params["lookback"])
+        topn = int(self.params["top_n"])
+        gross = float(self.params["gross"])
+        scores: dict[str, float] = {}
+        for s, df in data.items():
+            c = df["close"]
+            if len(c) < lb + 1:
+                continue
+            base = float(c.iloc[-lb - 1])
+            if base > 0:
+                scores[s] = float(c.iloc[-1]) / base - 1.0
+        if len(scores) < 2 * topn:
+            return {}
+        ranked = sorted(scores, key=lambda s: scores[s], reverse=True)
+        longs, shorts = ranked[:topn], ranked[-topn:]
+        wl = (gross / 2) / topn
+        ws = -(gross / 2) / topn
+        weights = {s: wl for s in longs}
+        weights.update({s: ws for s in shorts})
+        return weights
+
+
 CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSMomentumStrategy.name:    XSMomentumStrategy,
     XSMultiFactorStrategy.name: XSMultiFactorStrategy,
+    XSLongShortStrategy.name:   XSLongShortStrategy,
 }
 
 
@@ -145,6 +185,7 @@ def list_xs_strategies() -> list[dict]:
             "required_bars": c.required_bars,
             "default_params": c.default_params,
             "portfolio": True,
+            "long_short": c.long_short,
         }
         for c in CROSS_SECTIONAL_REGISTRY.values()
     ]

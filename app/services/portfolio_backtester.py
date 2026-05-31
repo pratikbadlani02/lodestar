@@ -66,17 +66,19 @@ class PortfolioBacktestEngine:
         equity_curve: list[dict[str, Any]] = []
         target: dict[str, float] = {}
 
-        def _close_trade(s, exit_price, exit_time, reason):
-            qty = pos[s]
-            pnl = (exit_price - entry_px[s]) * qty - 2 * self.commission
-            pnl_pct = (exit_price / entry_px[s] - 1.0) * 100 if entry_px[s] else 0.0
+        long_short = getattr(self.strategy, "long_short", False)
+
+        def _close_trade(s, qty, entry_price, entry_time, exit_price, exit_time, reason):
+            # qty is SIGNED (long > 0, short < 0); pnl works for both sides.
+            pnl = (exit_price - entry_price) * qty - 2 * self.commission
+            pnl_pct = ((exit_price / entry_price - 1.0) * 100 * (1 if qty >= 0 else -1)) if entry_price else 0.0
             trades.append({
-                "symbol": s, "side": OrderSide.BUY.value,
-                "entry_time": entry_t[s].to_pydatetime() if hasattr(entry_t[s], "to_pydatetime") else entry_t[s],
+                "symbol": s, "side": OrderSide.BUY.value if qty > 0 else OrderSide.SELL.value,
+                "entry_time": entry_time.to_pydatetime() if hasattr(entry_time, "to_pydatetime") else entry_time,
                 "exit_time": exit_time.to_pydatetime() if hasattr(exit_time, "to_pydatetime") else exit_time,
-                "entry_price": Decimal(str(round(entry_px[s], 4))),
+                "entry_price": Decimal(str(round(entry_price, 4))),
                 "exit_price": Decimal(str(round(exit_price, 4))),
-                "qty": Decimal(str(round(qty, 8))),
+                "qty": Decimal(str(round(abs(qty), 8))),
                 "pnl": Decimal(str(round(pnl, 2))),
                 "pnl_pct": Decimal(str(round(pnl_pct, 4))),
                 "reason": reason,
@@ -95,57 +97,93 @@ class PortfolioBacktestEngine:
                     target = {}
 
                 equity = cash + sum(pos[s] * float(closes[s].iloc[i]) for s in symbols)
-                # 1) Sell / trim everything first to free cash.
-                for s in symbols:
-                    px = float(opens[s].iloc[i + 1])
-                    if not np.isfinite(px) or px <= 0:
-                        continue
-                    w = target.get(s, 0.0)
-                    desired = math.floor((w * equity) / (px * (1 + self.slippage))) if w > 0 else 0
-                    if desired < pos[s]:
-                        sell_qty = pos[s] - desired
-                        cash += sell_qty * px * (1 - self.slippage) - self.commission
-                        if desired == 0 and pos[s] > 0:
-                            _close_trade(s, px * (1 - self.slippage), nt, f"rotated out (w={w:.2f})")
-                            entry_px[s], entry_t[s] = 0.0, None
-                        pos[s] = desired
-                # 2) Buy / add into the new targets.
-                for s in symbols:
-                    w = target.get(s, 0.0)
-                    if w <= 0:
-                        continue
-                    px = float(opens[s].iloc[i + 1])
-                    if not np.isfinite(px) or px <= 0:
-                        continue
-                    fill = px * (1 + self.slippage)
-                    desired = math.floor((w * equity) / fill)
-                    add = desired - pos[s]
-                    if add <= 0:
-                        continue
-                    cost = add * fill + self.commission
-                    if cost > cash:  # cap at affordable
-                        add = max(0, math.floor((cash - self.commission) / fill))
-                        cost = add * fill + self.commission
-                    if add <= 0:
-                        continue
-                    if pos[s] == 0:
-                        entry_px[s], entry_t[s] = fill, nt
-                    else:
-                        entry_px[s] = (entry_px[s] * pos[s] + fill * add) / (pos[s] + add)
-                    cash -= cost
-                    pos[s] += add
 
-            # Daily mark-to-market at bar i+1 close.
+                if not long_short:
+                    # ── Long-only: sell/trim first, then buy ──────────────
+                    for s in symbols:
+                        px = float(opens[s].iloc[i + 1])
+                        if not np.isfinite(px) or px <= 0:
+                            continue
+                        w = target.get(s, 0.0)
+                        desired = math.floor((w * equity) / (px * (1 + self.slippage))) if w > 0 else 0
+                        if desired < pos[s]:
+                            sell_qty = pos[s] - desired
+                            cash += sell_qty * px * (1 - self.slippage) - self.commission
+                            if desired == 0 and pos[s] > 0:
+                                _close_trade(s, pos[s], entry_px[s], entry_t[s], px * (1 - self.slippage), nt, f"rotated out (w={w:.2f})")
+                                entry_px[s], entry_t[s] = 0.0, None
+                            pos[s] = desired
+                    for s in symbols:
+                        w = target.get(s, 0.0)
+                        if w <= 0:
+                            continue
+                        px = float(opens[s].iloc[i + 1])
+                        if not np.isfinite(px) or px <= 0:
+                            continue
+                        fill = px * (1 + self.slippage)
+                        desired = math.floor((w * equity) / fill)
+                        add = desired - pos[s]
+                        if add <= 0:
+                            continue
+                        cost = add * fill + self.commission
+                        if cost > cash:
+                            add = max(0, math.floor((cash - self.commission) / fill))
+                            cost = add * fill + self.commission
+                        if add <= 0:
+                            continue
+                        if pos[s] == 0:
+                            entry_px[s], entry_t[s] = fill, nt
+                        else:
+                            entry_px[s] = (entry_px[s] * pos[s] + fill * add) / (pos[s] + add)
+                        cash -= cost
+                        pos[s] += add
+                else:
+                    # ── Long/short: signed target positions ───────────────
+                    for s in symbols:
+                        px = float(opens[s].iloc[i + 1])
+                        if not np.isfinite(px) or px <= 0:
+                            continue
+                        w = target.get(s, 0.0)
+                        if w > 0:
+                            fill = px * (1 + self.slippage)
+                            desired = math.floor((w * equity) / fill)
+                        elif w < 0:
+                            fill = px * (1 - self.slippage)
+                            desired = -math.floor((abs(w) * equity) / fill)
+                        else:
+                            desired, fill = 0, px
+                        old = pos[s]
+                        if desired == old:
+                            continue
+                        delta = desired - old
+                        # Cash: buy at ask, sell/short at bid.
+                        if delta > 0:
+                            cash -= delta * px * (1 + self.slippage) + self.commission
+                        else:
+                            cash += (-delta) * px * (1 - self.slippage) - self.commission
+                        if old == 0:
+                            entry_px[s], entry_t[s] = fill, nt
+                        elif (old > 0) == (desired > 0) and desired != 0:
+                            if abs(desired) > abs(old):  # adding to same side
+                                entry_px[s] = (entry_px[s] * abs(old) + fill * (abs(desired) - abs(old))) / abs(desired)
+                            # trimming same side → keep entry
+                        else:  # crossed zero or flipped sign → realize old lot
+                            close_px = px * (1 - self.slippage) if old > 0 else px * (1 + self.slippage)
+                            _close_trade(s, old, entry_px[s], entry_t[s], close_px, nt, "rotated/flipped")
+                            entry_px[s], entry_t[s] = (fill, nt) if desired != 0 else (0.0, None)
+                        pos[s] = desired
+
+            # Daily mark-to-market at bar i+1 close (signed-safe).
             eq = cash + sum(pos[s] * float(closes[s].iloc[i + 1]) for s in symbols)
             equity_curve.append({"t": nt.isoformat(), "equity": round(eq, 2)})
 
-        # Liquidate at the final bar.
+        # Liquidate at the final bar (handles longs and shorts).
         last_t = times[-1]
         for s in symbols:
-            if pos[s] > 0:
+            if pos[s] != 0:
                 px = float(closes[s].iloc[-1])
                 cash += pos[s] * px - self.commission
-                _close_trade(s, px, last_t, "backtest_end_liquidation")
+                _close_trade(s, pos[s], entry_px[s], entry_t[s], px, last_t, "backtest_end_liquidation")
                 pos[s] = 0.0
 
         return self._metrics(cash, equity_curve, trades)
