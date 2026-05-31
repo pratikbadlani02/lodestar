@@ -166,10 +166,58 @@ class XSLongShortStrategy(CrossSectionalStrategy):
         return weights
 
 
+class RiskParityStrategy(CrossSectionalStrategy):
+    """Inverse-volatility risk parity — weight each name by 1/volatility so every
+    holding contributes roughly equal risk (the All-Weather sizing principle).
+    Optional trend filter (skip downtrending names) and portfolio vol target
+    (scale total exposure down, holding cash, when basket vol runs hot)."""
+    name = "risk_parity"
+    description = "Inverse-vol risk parity sizing across the basket (optional vol target)"
+    required_bars = 110
+    default_params = {
+        "vol_window": 20,
+        "rebalance_days": 21,
+        "trend_filter": True,
+        "trend_ma": 100,
+        "vol_target": 0.0,   # annualized % portfolio target; 0 = no scaling
+    }
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        import math
+        vw = int(self.params["vol_window"])
+        use_trend = bool(self.params["trend_filter"])
+        ma_n = int(self.params["trend_ma"])
+        vt = float(self.params["vol_target"])
+
+        inv, vol = {}, {}
+        for s, df in data.items():
+            c = df["close"]
+            need = max(vw, ma_n if use_trend else 0) + 1
+            if len(c) < need:
+                continue
+            v = float(c.pct_change().iloc[-vw:].std()) * math.sqrt(252)
+            if v <= 0:
+                continue
+            if use_trend and float(c.iloc[-1]) < float(c.rolling(ma_n).mean().iloc[-1]):
+                continue  # don't allocate to downtrending names
+            vol[s] = v
+            inv[s] = 1.0 / v
+        if not inv:
+            return {}
+        tot = sum(inv.values())
+        w = {s: inv[s] / tot for s in inv}
+        if vt > 0:  # scale exposure to hit a portfolio vol target (lever down only)
+            port_vol = sum(w[s] * vol[s] for s in w)  # ignores correlation (conservative)
+            scale = min(1.0, (vt / 100.0) / port_vol) if port_vol > 0 else 1.0
+            w = {s: wi * scale for s, wi in w.items()}
+        return w
+
+
 CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
     XSMomentumStrategy.name:    XSMomentumStrategy,
     XSMultiFactorStrategy.name: XSMultiFactorStrategy,
     XSLongShortStrategy.name:   XSLongShortStrategy,
+    RiskParityStrategy.name:    RiskParityStrategy,
 }
 
 

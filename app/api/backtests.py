@@ -10,6 +10,8 @@ from app.core.models import Backtest, BacktestStatus, BacktestTrade
 from app.core.schemas import BacktestCreate, BacktestRead, BacktestTradeRead
 from app.core.security import get_current_user
 from app.services.audit import audit
+from app.services.event_backtester import EVENT_REGISTRY
+from app.services.options_backtester import OPTIONS_REGISTRY
 from app.strategies.cross_sectional import CROSS_SECTIONAL_REGISTRY
 from app.strategies.registry import STRATEGY_REGISTRY
 
@@ -22,12 +24,11 @@ async def create_backtest(
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_current_user),
 ) -> Backtest:
-    if payload.strategy_type not in STRATEGY_REGISTRY and payload.strategy_type not in CROSS_SECTIONAL_REGISTRY:
-        known = list(STRATEGY_REGISTRY.keys()) + list(CROSS_SECTIONAL_REGISTRY.keys())
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown strategy_type. Available: {known}",
-        )
+    if (payload.strategy_type not in STRATEGY_REGISTRY
+            and payload.strategy_type not in CROSS_SECTIONAL_REGISTRY
+            and payload.strategy_type not in OPTIONS_REGISTRY
+            and payload.strategy_type not in EVENT_REGISTRY):
+        raise HTTPException(status_code=400, detail="Unknown strategy_type.")
     if payload.end_date <= payload.start_date:
         raise HTTPException(status_code=400, detail="end_date must be after start_date")
 

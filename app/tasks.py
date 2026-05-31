@@ -394,6 +394,54 @@ async def run_backtest(backtest_id: UUID) -> dict:
                 })
                 return {"status": "completed", "return_pct": float(bt.total_return_pct)}
 
+            async def _persist(res):
+                for t in res["trades"]:
+                    db.add(BacktestTrade(backtest_id=bt.id, **t))
+                bt.status = BacktestStatus.COMPLETED
+                bt.final_equity = res["final_equity"]
+                bt.total_return_pct = res["total_return_pct"]
+                bt.sharpe_ratio = res["sharpe_ratio"]
+                bt.max_drawdown_pct = res["max_drawdown_pct"]
+                bt.win_rate_pct = res["win_rate_pct"]
+                bt.total_trades = res["total_trades"]
+                bt.equity_curve = res["equity_curve"][:5000]
+                bt.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+                await ws_emit("backtest_completed", {
+                    "id": str(bt.id), "return_pct": float(bt.total_return_pct), "trades": bt.total_trades,
+                })
+
+            # ── Options / volatility strategies (single underlying, BS-priced) ──
+            from app.services.options_backtester import OPTIONS_REGISTRY
+            if bt.strategy_type in OPTIONS_REGISTRY:
+                from app.services.options_backtester import OptionsBacktestEngine
+                sym = bt.symbols[0]
+                await fetch_and_store_bars(db, symbol=sym, timeframe="1Day", start=bt.start_date - timedelta(days=60))
+                df = await get_bars_df(db, symbol=sym, timeframe="1d", start=bt.start_date, end=bt.end_date)
+                if len(df) < 65:
+                    bt.status = BacktestStatus.FAILED; bt.error = "Not enough data"; await db.commit(); return {"status": "failed"}
+                engine = OptionsBacktestEngine(bt.strategy_type, bt.params, bt.initial_capital)
+                res = await asyncio.to_thread(lambda: engine.run(sym, df))
+                await _persist(res)
+                return {"status": "completed", "return_pct": float(bt.total_return_pct)}
+
+            # ── Event-driven (PEAD) — needs the symbol's earnings surprises ──
+            from app.services.event_backtester import EVENT_REGISTRY
+            if bt.strategy_type in EVENT_REGISTRY:
+                from app.services.event_backtester import EventBacktestEngine
+                from app.services.fundamentals import get_earnings_surprise
+                sym = bt.symbols[0]
+                await fetch_and_store_bars(db, symbol=sym, timeframe="1Day", start=bt.start_date - timedelta(days=60))
+                df = await get_bars_df(db, symbol=sym, timeframe="1d", start=bt.start_date, end=bt.end_date)
+                if len(df) < 10:
+                    bt.status = BacktestStatus.FAILED; bt.error = "Not enough data"; await db.commit(); return {"status": "failed"}
+                surp = await get_earnings_surprise(sym)
+                events = [{"quarter": h.get("quarter"), "surprise_pct": h.get("surprise_pct")} for h in (surp.get("history") or [])]
+                engine = EventBacktestEngine(bt.strategy_type, bt.params, bt.initial_capital)
+                res = await asyncio.to_thread(lambda: engine.run(sym, df, events))
+                await _persist(res)
+                return {"status": "completed", "return_pct": float(bt.total_return_pct)}
+
             all_trades: list = []
             combined_curve: list[dict] = []
             final_equities: list[float] = []

@@ -10,16 +10,23 @@ from app.core.models import Strategy, StrategyStatus
 from app.core.schemas import StrategyCreate, StrategyRead, StrategyUpdate
 from app.core.security import get_current_user
 from app.services.audit import audit
+from app.services.event_backtester import EVENT_REGISTRY, list_event_strategies
+from app.services.options_backtester import OPTIONS_REGISTRY, list_options_strategies
 from app.strategies.cross_sectional import CROSS_SECTIONAL_REGISTRY, list_xs_strategies
 from app.strategies.registry import STRATEGY_REGISTRY, list_strategies
 
 router = APIRouter(prefix="/strategies", tags=["Strategies"])
 
 
+def _known_type(stype: str) -> bool:
+    return (stype in STRATEGY_REGISTRY or stype in CROSS_SECTIONAL_REGISTRY
+            or stype in OPTIONS_REGISTRY or stype in EVENT_REGISTRY)
+
+
 @router.get("/available")
 async def available() -> list[dict]:
-    """List all registered strategy types (per-symbol + portfolio) with defaults."""
-    return list_strategies() + list_xs_strategies()
+    """All strategy types: per-symbol, portfolio, options, and event-driven."""
+    return list_strategies() + list_xs_strategies() + list_options_strategies() + list_event_strategies()
 
 
 @router.get("", response_model=list[StrategyRead])
@@ -37,12 +44,8 @@ async def create(
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_current_user),
 ) -> Strategy:
-    if payload.strategy_type not in STRATEGY_REGISTRY and payload.strategy_type not in CROSS_SECTIONAL_REGISTRY:
-        known = list(STRATEGY_REGISTRY.keys()) + list(CROSS_SECTIONAL_REGISTRY.keys())
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown strategy_type. Available: {known}",
-        )
+    if not _known_type(payload.strategy_type):
+        raise HTTPException(status_code=400, detail="Unknown strategy_type.")
 
     strategy = Strategy(
         name=payload.name,
