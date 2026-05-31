@@ -90,8 +90,14 @@ def _statement_to_records(df: pd.DataFrame | None) -> list[dict[str, Any]]:
     return out
 
 
-async def _cached(key: str, ttl: int, loader):
-    """Generic Redis-backed JSON cache wrapper."""
+async def _cached(key: str, ttl: int, loader, cache_if=None):
+    """Generic Redis-backed JSON cache wrapper.
+
+    cache_if: optional predicate(data) -> bool. When given, the result is only
+    written to the cache if it returns True. Used to avoid caching an empty
+    payload (e.g. a transient Yahoo rate-limit / block) for the full TTL, which
+    would otherwise keep a view blank long after the upstream recovers.
+    """
     r = await get_redis()
     cached = await r.get(key)
     if cached:
@@ -101,7 +107,8 @@ async def _cached(key: str, ttl: int, loader):
             pass
     data = await asyncio.to_thread(loader)
     try:
-        await r.set(key, json.dumps(data, default=str), ex=ttl)
+        if cache_if is None or cache_if(data):
+            await r.set(key, json.dumps(data, default=str), ex=ttl)
     except (TypeError, ValueError) as e:
         logger.warning("cache_set_failed", key=key, error=str(e))
     return data
@@ -246,35 +253,51 @@ async def get_earnings_calendar(symbols: list[str]) -> list[dict[str, Any]]:
 
     def loader() -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
+        failed: list[str] = []
         for s in syms:
+            row: dict[str, Any] | None = None
             try:
                 t = yf.Ticker(s)
                 cal = t.calendar
                 if isinstance(cal, dict):
                     earn_dates = cal.get("Earnings Date") or []
                     if earn_dates:
-                        out.append({
+                        row = {
                             "symbol": s,
-                            "earnings_date": _clean(earn_dates[0]) if earn_dates else None,
+                            "earnings_date": _clean(earn_dates[0]),
                             "eps_estimate": _clean(cal.get("Earnings Average")),
                             "eps_high": _clean(cal.get("Earnings High")),
                             "eps_low": _clean(cal.get("Earnings Low")),
                             "revenue_estimate": _clean(cal.get("Revenue Average")),
-                        })
+                        }
                 elif isinstance(cal, pd.DataFrame) and not cal.empty:
-                    row = cal.iloc[:, 0]
-                    out.append({
+                    rowdata = cal.iloc[:, 0]
+                    row = {
                         "symbol": s,
-                        "earnings_date": _clean(row.get("Earnings Date")),
-                        "eps_estimate": _clean(row.get("Earnings Average")),
-                        "revenue_estimate": _clean(row.get("Revenue Average")),
-                    })
+                        "earnings_date": _clean(rowdata.get("Earnings Date")),
+                        "eps_estimate": _clean(rowdata.get("Earnings Average")),
+                        "revenue_estimate": _clean(rowdata.get("Revenue Average")),
+                    }
             except Exception as e:
-                logger.debug("calendar_skip", symbol=s, error=str(e))
+                logger.debug("calendar_symbol_error", symbol=s, error=str(e))
+            if row:
+                out.append(row)
+            else:
+                failed.append(s)
+        if failed:
+            # Surfaced at WARNING (not debug) so the upstream cause — almost
+            # always Yahoo rate-limiting / blocking the deploy's egress IP — is
+            # visible in production logs instead of silently rendering blank.
+            logger.warning(
+                "earnings_calendar_no_data",
+                failed=len(failed), total=len(syms), symbols=failed[:25],
+            )
         out.sort(key=lambda x: (x.get("earnings_date") or "9999"))
         return out
 
-    return await _cached(key, TTL_CALENDAR, loader)
+    # Don't cache an all-empty result: a transient upstream failure shouldn't
+    # keep the calendar blank for the full TTL after Yahoo recovers.
+    return await _cached(key, TTL_CALENDAR, loader, cache_if=bool)
 
 
 # ── Analyst recommendations + price targets ───────────────────────
