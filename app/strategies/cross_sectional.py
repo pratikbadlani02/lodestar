@@ -213,11 +213,75 @@ class RiskParityStrategy(CrossSectionalStrategy):
         return w
 
 
+class XSSharpeMomentumStrategy(CrossSectionalStrategy):
+    """Risk-adjusted (Sharpe) momentum — rank by lookback return divided by
+    lookback volatility, holding the top-N. Favors names rising *smoothly*,
+    which historically improves both return and stability vs raw momentum."""
+    name = "xs_sharpe_momentum"
+    description = "Cross-sectional risk-adjusted momentum (return/vol), hold top-N"
+    required_bars = 80
+    default_params = {"lookback": 63, "top_n": 3, "rebalance_days": 21}
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        import math
+        lb = int(self.params["lookback"]); topn = int(self.params["top_n"])
+        score = {}
+        for s, df in data.items():
+            c = df["close"]
+            if len(c) < lb + 1:
+                continue
+            base = float(c.iloc[-lb - 1])
+            if base <= 0:
+                continue
+            mom = float(c.iloc[-1]) / base - 1.0
+            vol = float(c.pct_change().iloc[-lb:].std()) * math.sqrt(252)
+            if vol > 0 and mom > 0:           # only positive, risk-adjusted
+                score[s] = mom / vol
+        ranked = sorted(score, key=lambda s: score[s], reverse=True)[:topn]
+        if not ranked:
+            return {}
+        w = 1.0 / len(ranked)
+        return {s: w for s in ranked}
+
+
+class XSAccelMomentumStrategy(CrossSectionalStrategy):
+    """Acceleration momentum — rank by the *change* in momentum (recent window
+    return minus the prior window return), holding names whose momentum is
+    accelerating. Catches emerging leaders earlier than level momentum."""
+    name = "xs_accel"
+    description = "Cross-sectional acceleration (momentum-of-momentum), hold top-N"
+    required_bars = 70
+    default_params = {"window": 21, "top_n": 3, "rebalance_days": 21}
+
+    def target_weights(self, data: dict[str, pd.DataFrame]) -> dict[str, float]:
+        w_ = int(self.params["window"]); topn = int(self.params["top_n"])
+        score = {}
+        for s, df in data.items():
+            c = df["close"]
+            if len(c) < 2 * w_ + 1:
+                continue
+            now = float(c.iloc[-1]); mid = float(c.iloc[-w_ - 1]); old = float(c.iloc[-2 * w_ - 1])
+            if mid <= 0 or old <= 0:
+                continue
+            recent = now / mid - 1.0
+            prior = mid / old - 1.0
+            accel = recent - prior
+            if recent > 0 and accel > 0:      # rising and accelerating
+                score[s] = accel
+        ranked = sorted(score, key=lambda s: score[s], reverse=True)[:topn]
+        if not ranked:
+            return {}
+        w = 1.0 / len(ranked)
+        return {s: w for s in ranked}
+
+
 CROSS_SECTIONAL_REGISTRY: dict[str, type[CrossSectionalStrategy]] = {
-    XSMomentumStrategy.name:    XSMomentumStrategy,
-    XSMultiFactorStrategy.name: XSMultiFactorStrategy,
-    XSLongShortStrategy.name:   XSLongShortStrategy,
-    RiskParityStrategy.name:    RiskParityStrategy,
+    XSMomentumStrategy.name:        XSMomentumStrategy,
+    XSMultiFactorStrategy.name:     XSMultiFactorStrategy,
+    XSLongShortStrategy.name:       XSLongShortStrategy,
+    RiskParityStrategy.name:        RiskParityStrategy,
+    XSSharpeMomentumStrategy.name:  XSSharpeMomentumStrategy,
+    XSAccelMomentumStrategy.name:   XSAccelMomentumStrategy,
 }
 
 
