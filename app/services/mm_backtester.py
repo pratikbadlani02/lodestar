@@ -111,28 +111,22 @@ class MarketMakingEngine:
 
         rng = np.random.default_rng(int(self.params["seed"]))
         equity = self.initial_capital
-        equity_curve, trades = [], []
+        equity_curve = []
         day_pnls = []
+        total_fills = 0
+        # Market making has no directional entry/exit round trips — it's a stream
+        # of interleaved fills whose P&L is spread capture. Forcing it into the
+        # (entry, exit, qty) trade schema is always misleading, so we don't emit
+        # per-session "trades"; the result lives in the equity curve + fill count
+        # + session win-rate. `total_trades` here means total fills (executions).
         for i in range(self.required_bars, n):
             sd = float(vol.iloc[i]) if not pd.isna(vol.iloc[i]) else 0.01
             pnl, fills = self._session(float(close.iloc[i - 1]), max(0.002, sd), rng)
+            total_fills += fills
             equity += pnl
             day_pnls.append(pnl)
             equity_curve.append({"t": times.iloc[i].isoformat(), "equity": round(equity, 2)})
-            if fills:
-                # A MM "trade" is a whole day's session, not a directional round
-                # trip — P/L is spread capture across `fills` fills, so entry==exit
-                # (the day's mark) to avoid implying a price move that isn't there.
-                mark = Decimal(str(round(float(close.iloc[i]), 4)))
-                trades.append({
-                    "symbol": symbol, "side": "buy",
-                    "entry_time": times.iloc[i].to_pydatetime(), "exit_time": times.iloc[i].to_pydatetime(),
-                    "entry_price": mark, "exit_price": mark,
-                    "qty": Decimal(str(fills)),
-                    "pnl": Decimal(str(round(pnl, 2))),
-                    "pnl_pct": Decimal(str(round(pnl / self.initial_capital * 100, 4))),
-                    "reason": f"MM session @ ~{mark} — {fills} fills, spread P/L (non-directional)",
-                })
+        trades = []
 
         total_return_pct = (equity / self.initial_capital - 1.0) * 100
         sharpe = max_dd = 0.0
@@ -150,7 +144,7 @@ class MarketMakingEngine:
             "sharpe_ratio": Decimal(str(round(sharpe, 4))),
             "max_drawdown_pct": Decimal(str(round(max_dd, 4))),
             "win_rate_pct": Decimal(str(round(win_days / len(day_pnls) * 100, 4))) if day_pnls else Decimal("0"),
-            "total_trades": len(trades),
-            "trades": trades[:2000],
+            "total_trades": total_fills,   # executions (fills), not round trips
+            "trades": trades,              # intentionally empty for MM
             "equity_curve": equity_curve,
         }
