@@ -60,7 +60,7 @@ Two options:
 ## Step 1 — Initialize git and push to GitHub
 
 ```bash
-cd /Users/pbadlani/quant-platform
+cd /path/to/lodestar
 git init
 git add .
 git commit -m "Initial commit"
@@ -176,14 +176,14 @@ Once you've verified manual API calls work end-to-end:
 
 ---
 
-## Local development unchanged
+## Local development
 
-The Dockerfile + render.yaml are additive. Locally you can still run
-`./manage.sh start` (which now loads only `com.quant.api` — the scheduler
-lives inside it). The old `com.quant.worker` and `com.quant.beat` services
-are gone; bootout any that are still loaded:
+The Dockerfile and `render.yaml` are additive — local development is unaffected. Run the
+API and the in-process scheduler together with:
 
 ```bash
-launchctl bootout gui/$(id -u)/com.quant.worker 2>/dev/null
-launchctl bootout gui/$(id -u)/com.quant.beat 2>/dev/null
+uvicorn app.main:app --reload
 ```
+
+See the README for the full local setup. There is no separate worker or beat process to
+manage; all periodic work runs inside the API via APScheduler.

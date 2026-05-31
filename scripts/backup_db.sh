@@ -10,8 +10,8 @@
 #   DATABASE_URL_SYNC=... ./scripts/backup_db.sh
 #   BACKUP_DIR=/path ./scripts/backup_db.sh
 #
-# Cron example (local Mac, 03:00 daily):
-#   0 3 * * * cd /Users/pbadlani/quant-platform && ./scripts/backup_db.sh
+# Cron example (03:00 daily):
+#   0 3 * * * cd /path/to/lodestar && ./scripts/backup_db.sh
 #
 # Render free Postgres has no managed backups and expires after 90 days, so
 # *some* offsite copy is mandatory if you care about your data.

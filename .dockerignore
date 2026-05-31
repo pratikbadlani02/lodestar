@@ -30,17 +30,8 @@ node_modules
 # Build / runtime artifacts
 logs
 *.log
-celerybeat-schedule*
-celerybeat.pid
 *.sqlite
 *.db
-
-# Local-only tooling
-launchd
-nginx
-fix_*.sh
-setup_mac.sh
-manage.sh
 
 # Docs / tests
 docs

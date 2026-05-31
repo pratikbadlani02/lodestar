@@ -23,10 +23,13 @@ frontend/dist/
 # Runtime
 logs/
 *.log
-celerybeat-schedule*
-celerybeat.pid
 *.sqlite
 *.db
+backups/
+
+# Local Claude Code state (machine-specific, do not commit)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # IDE
 .vscode/
