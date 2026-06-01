@@ -383,9 +383,15 @@ export default function ChartWidget({ symbol, height = 420, compact = false }) {
     // Sync time scales
     const charts = [chart, rsiChart, macdChart]
     const syncHandler = (chart) => (range) => {
-      if (syncingRef.current) return
+      // lightweight-charts fires this with null when a pane has no range yet
+      // (e.g. an RSI/MACD pane just got created) — passing null into
+      // setVisibleLogicalRange throws "Cannot read properties of null".
+      if (syncingRef.current || range == null) return
       syncingRef.current = true
-      charts.forEach(c => { if (c !== chart) c.timeScale().setVisibleLogicalRange(range) })
+      charts.forEach(c => {
+        if (c === chart) return
+        try { c.timeScale().setVisibleLogicalRange(range) } catch { /* pane disposed mid-sync */ }
+      })
       syncingRef.current = false
     }
     const unsubs = charts.map(c => {
