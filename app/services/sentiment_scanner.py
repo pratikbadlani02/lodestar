@@ -44,6 +44,31 @@ UNIVERSES: dict[str, dict[str, Any]] = {
         "symbols": ["NVDA", "AMD", "AVGO", "TSM", "MU", "SMCI", "ASML", "ARM",
                     "QCOM", "INTC", "MRVL", "PLTR", "SNOW", "CRM", "ORCL"],
     },
+    "growth": {
+        "label": "High-growth / secular",
+        "symbols": ["NVDA", "TSLA", "PLTR", "SHOP", "NET", "CRWD", "DDOG", "SNOW",
+                    "MELI", "ABNB", "UBER", "COIN", "RBLX", "SOFI", "DASH"],
+    },
+    "dividend": {
+        "label": "Dividend & value blue chips",
+        "symbols": ["JNJ", "PG", "KO", "PEP", "CVX", "ABBV", "MRK", "HD", "MCD",
+                    "VZ", "T", "PFE", "CSCO", "IBM", "MMM"],
+    },
+    "financials": {
+        "label": "Banks & financials",
+        "symbols": ["JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "BLK", "AXP",
+                    "V", "MA", "SPGI", "CB", "PNC", "USB"],
+    },
+    "energy": {
+        "label": "Energy",
+        "symbols": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO",
+                    "OXY", "WMB", "KMI", "HAL", "DVN", "HES", "FANG"],
+    },
+    "healthcare": {
+        "label": "Healthcare",
+        "symbols": ["UNH", "JNJ", "LLY", "MRK", "ABBV", "PFE", "TMO", "ABT",
+                    "DHR", "BMY", "AMGN", "CVS", "MDT", "ISRG", "GILD"],
+    },
     "broad": {
         "label": "Broad market & sectors",
         "symbols": ["SPY", "QQQ", "DIA", "IWM", "XLK", "XLF", "XLE", "XLV",
@@ -53,7 +78,9 @@ UNIVERSES: dict[str, dict[str, Any]] = {
 DEFAULT_UNIVERSE = "megacap"
 
 # Weights for the composite — renormalised over whichever signals are available.
-WEIGHTS = {"momentum": 0.28, "news": 0.20, "earnings": 0.18, "analyst": 0.20, "insider": 0.14}
+# Momentum & analyst are the most robust signals; news is a crude keyword lexicon
+# so it's weighted a touch lower.
+WEIGHTS = {"momentum": 0.30, "news": 0.16, "earnings": 0.16, "analyst": 0.22, "insider": 0.16}
 
 _INSIDER_SCORE = {"net_buying": 78.0, "net_selling": 22.0, "neutral": 50.0}
 
@@ -89,10 +116,15 @@ def _build_pick(symbol: str, a: dict[str, Any], news_net: int | None) -> dict[st
     tags: list[tuple[str, str]] = []
 
     # ── Momentum ──
+    # Momentum: blend the composite-score momentum with raw 3-month return so
+    # strong movers separate from the pack instead of all pinning near the top.
     mom = score.get("momentum")
     r3 = rets.get("3m")
-    if mom is None and r3 is not None:
-        mom = _scale(r3, -20, 35)
+    r3_score = _scale(r3, -25, 45) if r3 is not None else None
+    if mom is not None and r3_score is not None:
+        mom = mom * 0.6 + r3_score * 0.4
+    elif mom is None:
+        mom = r3_score
     sub["momentum"] = mom
     if tech.get("trend") == "bullish":
         tags.append(("Uptrend", "up"))
@@ -105,7 +137,7 @@ def _build_pick(symbol: str, a: dict[str, Any], news_net: int | None) -> dict[st
 
     # ── News sentiment ──
     if news_net is not None:
-        sub["news"] = _scale(news_net, -3, 3)
+        sub["news"] = _scale(news_net, -8, 8)
         if news_net >= 2:
             tags.append(("Positive news flow", "up"))
         elif news_net <= -2:
@@ -126,7 +158,7 @@ def _build_pick(symbol: str, a: dict[str, Any], news_net: int | None) -> dict[st
 
     # ── Analyst (mean upside blended with buy ratio) ──
     up = at.get("target_mean_upside_pct")
-    analyst_score = _scale(up, -20, 30) if up is not None else None
+    analyst_score = _scale(up, -25, 50) if up is not None else None
     nb = at.get("number_of_buy_ratings")
     nh = at.get("number_of_hold_ratings")
     ns = at.get("number_of_sell_ratings")

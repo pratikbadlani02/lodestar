@@ -14,7 +14,8 @@ import { PnlCell, HeatRing } from '../components/ui/charts'
 // status === 'scanning'.
 // ─────────────────────────────────────────────────────────────────────────
 
-const UNIVERSES = [
+// Fallback if the backend universe list can't be fetched.
+const FALLBACK_PRESETS = [
   { key: 'megacap', label: 'Megacap leaders' },
   { key: 'ai_semis', label: 'AI & semiconductors' },
   { key: 'broad', label: 'Broad market & sectors' },
@@ -35,30 +36,50 @@ export default function SentimentScanner() {
   const navigate = useNavigate()
   const { setSymbol } = useSymbol()
   const ctx = useSymbolContextMenu()
-  const [universe, setUniverse] = useState('megacap')
+  const [sel, setSel] = useState('megacap')          // preset key or `wl:<id>`
+  const [presets, setPresets] = useState(FALLBACK_PRESETS)
+  const [watchlists, setWatchlists] = useState([])
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
   const timer = useRef(null)
 
   const open = (sym) => { setSymbol(sym); navigate(`/analysis/${sym}`) }
 
-  const fetchScan = useCallback(async (uni, refresh = false) => {
+  // Populate the selector: curated universes from the backend + (if logged in)
+  // the user's watchlists, which scan via the symbols= param.
+  useEffect(() => {
+    api.getSentimentUniverses().then((d) => { if (d?.universes?.length) setPresets(d.universes) }).catch(() => {})
+    let hasToken = false
+    try { hasToken = !!sessionStorage.getItem('quant_token') } catch { /* ignore */ }
+    if (hasToken) api.listWatchlists().then((ws) => setWatchlists(Array.isArray(ws) ? ws : [])).catch(() => {})
+  }, [])
+
+  const fetchScan = useCallback(async (selection, refresh = false) => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
     setErr('')
     try {
-      const d = await api.getSentimentScan({ universe: uni, refresh })
+      let d
+      if (selection.startsWith('wl:')) {
+        const wl = watchlists.find((w) => `wl:${w.id}` === selection)
+        const syms = (wl?.symbols || []).join(',')
+        if (!syms) { setData({ status: 'ready', label: wl?.name || 'Watchlist', picks: [] }); return }
+        d = await api.getSentimentScan({ symbols: syms, refresh })
+        if (d && !d.label) d.label = wl?.name
+      } else {
+        d = await api.getSentimentScan({ universe: selection, refresh })
+      }
       setData(d)
-      if (d.status === 'scanning') timer.current = setTimeout(() => fetchScan(uni, false), 3500)
+      if (d.status === 'scanning') timer.current = setTimeout(() => fetchScan(selection, false), 3500)
     } catch (e) {
       setErr(e.message || 'Scan failed')
     }
-  }, [])
+  }, [watchlists])
 
   useEffect(() => {
     setData(null)
-    fetchScan(universe, false)
+    fetchScan(sel, false)
     return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [universe, fetchScan])
+  }, [sel, fetchScan])
 
   const scanning = !data || data.status === 'scanning'
   const picks = data?.status === 'ready' ? (data.picks || []) : []
@@ -74,12 +95,21 @@ export default function SentimentScanner() {
         subtitle="Top picks ranked by momentum, news, earnings, analyst & insider signals"
         actions={
           <div className="flex items-center gap-2">
-            <div className="w-48">
-              <Select value={universe} onChange={(e) => setUniverse(e.target.value)}>
-                {UNIVERSES.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+            <div className="w-56">
+              <Select value={sel} onChange={(e) => setSel(e.target.value)}>
+                <optgroup label="Universes">
+                  {presets.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+                </optgroup>
+                {watchlists.length > 0 && (
+                  <optgroup label="My watchlists">
+                    {watchlists.map((w) => (
+                      <option key={w.id} value={`wl:${w.id}`}>{w.name} ({w.symbols?.length || 0})</option>
+                    ))}
+                  </optgroup>
+                )}
               </Select>
             </div>
-            <IconButton icon={RefreshCw} label="Rescan" onClick={() => fetchScan(universe, true)}
+            <IconButton icon={RefreshCw} label="Rescan" onClick={() => fetchScan(sel, true)}
               className={scanning ? 'animate-spin' : ''} />
           </div>
         }
