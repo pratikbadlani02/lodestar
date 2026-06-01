@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api'
 import { useSymbolPage } from '../lib/SymbolContext'
 import SymbolHeader from '../components/SymbolHeader'
+import Term from '../components/Term'
 import { Card, Section } from '../components/ui/primitives'
 import { PnlCell } from '../components/ui/charts'
 import { fmtBig as fb, fmt } from '../components/ui/format'
@@ -238,9 +239,9 @@ export default function Fundamentals({ embedded = false }) {
           {/* Valuation */}
           <Section title="Valuation" icon={BarChart3} padded={false}>
             <div className="grid grid-cols-2 gap-2 p-3">
-              <StatTile label="Market Cap" value={fmtBig(profile.marketCap)} />
+              <StatTile label={<Term id="marketcap">Market Cap</Term>} value={fmtBig(profile.marketCap)} />
               <StatTile label="Enterprise" value={fmtBig(profile.enterpriseValue)} />
-              <StatTile label="P/E TTM" value={fmtNum(profile.trailingPE)} />
+              <StatTile label={<Term id="pe">P/E TTM</Term>} value={fmtNum(profile.trailingPE)} />
               <StatTile label="P/E Fwd" value={fmtNum(profile.forwardPE)} />
               <StatTile label="P/B" value={fmtNum(profile.priceToBook)} />
               <StatTile label="P/S" value={fmtNum(profile.priceToSalesTrailing12Months)} />
@@ -252,14 +253,14 @@ export default function Fundamentals({ embedded = false }) {
           {/* Profitability */}
           <Section title="Profitability" icon={TrendingUp} padded={false}>
             <div className="grid grid-cols-2 gap-2 p-3">
-              <StatTile label="Profit Margin" value={fmtPct(profile.profitMargins)}
+              <StatTile label={<Term id="margin">Profit Margin</Term>} value={fmtPct(profile.profitMargins)}
                 tone={(profile.profitMargins ?? 0) > 0.15 ? 'text-up' : (profile.profitMargins ?? 0) < 0 ? 'text-down' : 'text-ink-1'} />
               <StatTile label="Gross Margin" value={fmtPct(profile.grossMargins)} />
               <StatTile label="Op Margin" value={fmtPct(profile.operatingMargins)} />
-              <StatTile label="ROE" value={fmtPct(profile.returnOnEquity)}
+              <StatTile label={<Term id="roe">ROE</Term>} value={fmtPct(profile.returnOnEquity)}
                 tone={(profile.returnOnEquity ?? 0) > 0.15 ? 'text-up' : 'text-ink-1'} />
               <StatTile label="ROA" value={fmtPct(profile.returnOnAssets)} />
-              <StatTile label="EPS TTM" value={fmtNum(profile.trailingEps)} />
+              <StatTile label={<Term id="eps">EPS TTM</Term>} value={fmtNum(profile.trailingEps)} />
               <StatTile label="EPS Fwd" value={fmtNum(profile.forwardEps)} />
               <StatTile label="EBITDA" value={fmtBig(profile.ebitda)} />
             </div>
@@ -277,17 +278,17 @@ export default function Fundamentals({ embedded = false }) {
               <StatTile label="Total Debt" value={fmtBig(profile.totalDebt)} />
               <StatTile label="Cash/Share" value={fmtNum(profile.totalCashPerShare)} />
               <StatTile label="Book Value" value={fmtNum(profile.bookValue)} />
-              <StatTile label="FCF" value={fmtBig(profile.freeCashflow)} />
+              <StatTile label={<Term id="fcf">FCF</Term>} value={fmtBig(profile.freeCashflow)} />
             </div>
           </Section>
 
           {/* Dividends + Other */}
           <Section title="Distribution & Risk" icon={Building2} padded={false}>
             <div className="grid grid-cols-2 gap-2 p-3">
-              <StatTile label="Div Yield" value={fmtPct(profile.dividendYield)}
+              <StatTile label={<Term id="dividend">Div Yield</Term>} value={fmtPct(profile.dividendYield)}
                 tone={(profile.dividendYield ?? 0) > 0.03 ? 'text-up' : 'text-ink-1'} />
               <StatTile label="Payout" value={fmtPct(profile.payoutRatio)} />
-              <StatTile label="Beta" value={fmtNum(profile.beta)}
+              <StatTile label={<Term id="beta">Beta</Term>} value={fmtNum(profile.beta)}
                 tone={(profile.beta ?? 1) > 1.2 ? 'text-down' : (profile.beta ?? 1) < 0.8 ? 'text-up' : 'text-ink-1'} />
               <StatTile label="52w High" value={fmtNum(profile.fiftyTwoWeekHigh)} />
               <StatTile label="52w Low" value={fmtNum(profile.fiftyTwoWeekLow)} />

@@ -7,7 +7,7 @@ import {
   TrendingUp, Filter, Zap, FlaskConical,
   Layers, Building2, Calendar, LayoutGrid,
   Radio, Bitcoin, Coins, Gauge, PanelLeftClose, PanelLeftOpen, ChevronDown,
-  X,
+  X, GraduationCap, Radar,
 } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { api } from '../lib/api'
@@ -32,12 +32,14 @@ const NAV_GROUPS_COLLAPSED_KEY = 'quant_nav_groups_collapsed_v1'
 const NAV_GROUPS = [
   { id: 'pinned', label: null, items: [
     { to: '/',            icon: LayoutGrid,   label: 'Market',       end: true },
+    { to: '/learn',       icon: GraduationCap, label: 'Learn'                  },
     { to: '/workspace',   icon: Activity,     label: 'Workspace',    priv: true },
   ]},
   { id: 'markets', label: 'Markets', items: [
     { to: '/stocks',      icon: TrendingUp,   label: 'Stocks'                  },
     { to: '/market/region/6', icon: Newspaper, label: 'Market News'            },
     { to: '/heatmap',     icon: LayoutGrid,   label: 'Heatmap'                 },
+    { to: '/scanner',     icon: Radar,        label: 'Sentiment Scanner'       },
     { to: '/movers',      icon: Activity,     label: 'Movers'                  },
     { to: '/tape',        icon: Radio,        label: 'Time & Sales'            },
     { to: '/crypto',      icon: Bitcoin,      label: 'Crypto'                  },
@@ -51,6 +53,7 @@ const NAV_GROUPS = [
     { to: '/compare',     icon: GitCompare,   label: 'Compare Symbols'         },
   ]},
   { id: 'trade', label: 'Trade', items: [
+    { to: '/coach',       icon: GraduationCap, label: 'Guided Trade'             },
     { to: '/trade',       icon: Zap,          label: 'Quick Trade',  priv: true },
     { to: '/paper',       icon: FlaskConical, label: 'Paper Trade',  priv: true },
     { to: '/orders',      icon: ListOrdered,  label: 'Orders',       priv: true },

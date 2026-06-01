@@ -382,6 +382,40 @@ async def get_short_interest(symbol: str) -> dict:
     return await fund.get_short_interest(symbol)
 
 
+@router.get("/sentiment-scan/universes")
+async def sentiment_scan_universes() -> dict:
+    """List the curated universes the scanner can run."""
+    from app.services import sentiment_scanner as scanner
+    return {
+        "universes": [
+            {"key": k, "label": v["label"], "count": len(v["symbols"])}
+            for k, v in scanner.UNIVERSES.items()
+        ]
+    }
+
+
+@router.get("/sentiment-scan")
+async def sentiment_scan(
+    universe: str = Query(default="megacap"),
+    symbols: str | None = Query(default=None, description="Optional comma-separated override"),
+    refresh: bool = Query(default=False),
+) -> dict:
+    """Ranked market-sentiment top picks for a universe.
+
+    Fuses momentum, news sentiment, earnings track record, analyst targets and
+    insider flow into a 0–100 score. Returns the cached ranked result, or
+    `{status: "scanning"}` while a background scan runs (poll to get results).
+    """
+    import hashlib
+    from app.services import sentiment_scanner as scanner
+    syms = None
+    if symbols:
+        syms = [s.strip().upper() for s in symbols.split(",") if s.strip()][:30]
+        # Distinct cache key per custom list so different lists don't collide.
+        universe = "custom:" + hashlib.md5(",".join(sorted(syms)).encode()).hexdigest()[:8]
+    return await scanner.get_or_trigger(universe, symbols=syms, refresh=refresh)
+
+
 @router.get("/news-sentiment/{symbol}")
 async def get_news_sentiment(
     symbol: str,

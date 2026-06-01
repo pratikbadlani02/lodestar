@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import { Card } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
+import Term from '../components/Term'
 const DEFAULT_SYMBOLS = 'AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,NFLX,AMD,AVGO,JPM,XOM,WMT,UNH,V'
 
 // One-click universe presets so you don't have to type tickers. Sector groups
@@ -309,10 +310,10 @@ export default function Earnings() {
                 <thead>
                   <tr>
                     <th className="text-left">Symbol</th>
-                    <th className="text-right">EPS Est</th>
+                    <th className="text-right"><Term id="eps">EPS Est</Term></th>
                     <th className="text-right">EPS Low</th>
                     <th className="text-right">EPS High</th>
-                    <th className="text-right">Revenue Est</th>
+                    <th className="text-right"><Term id="revenue">Revenue Est</Term></th>
                   </tr>
                 </thead>
                 <tbody>

@@ -13,6 +13,7 @@ import {
   PageShell, PageHeader, Card, Button, IconButton, Input, Select, Pill,
 } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
+import Term from '../components/Term'
 
 // ── Constants ─────────────────────────────────────────────────────
 const PRESETS_KEY = 'quant_screener_presets_v1'
@@ -427,7 +428,7 @@ export default function Screener() {
                           className={`cursor-pointer select-none hover:text-ink-2 ${c.align === 'right' ? 'text-right' : 'text-left'} ${sortField === c.key ? 'text-accent' : ''}`}
                         >
                           <span className="inline-flex items-center gap-1">
-                            {c.label}
+                            {c.key === 'volume' ? <Term id="volume">{c.label}</Term> : c.label}
                             {sortField === c.key && (sortDir === 'asc' ? '↑' : '↓')}
                           </span>
                         </th>

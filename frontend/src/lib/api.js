@@ -143,6 +143,15 @@ export const api = {
     request('GET', `/market/crypto/bars/${encodeURIComponent(symbol)}?days=${days}&timeframe=${timeframe}`),
   getNewsSentiment: (symbol, limit = 30) => request('GET', `/market/news-sentiment/${symbol}?limit=${limit}`),
 
+  // ── Sentiment scanner (ranked top picks) ─────────────────────
+  getSentimentUniverses: () => request('GET', '/market/sentiment-scan/universes'),
+  getSentimentScan: ({ universe = 'megacap', symbols = '', refresh = false } = {}) => {
+    const p = new URLSearchParams({ universe })
+    if (symbols) p.set('symbols', symbols)
+    if (refresh) p.set('refresh', 'true')
+    return request('GET', `/market/sentiment-scan?${p}`)
+  },
+
   // ── Holistic analysis ────────────────────────────────────────
   getAnalysis: (symbol, includeNews = true) =>
     request('GET', `/market/analysis/${symbol}?include_news=${includeNews}`),

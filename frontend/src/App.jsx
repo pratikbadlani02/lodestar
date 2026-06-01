@@ -39,6 +39,9 @@ const Dividends         = lazy(() => import('./pages/Dividends'))
 const Insiders          = lazy(() => import('./pages/Insiders'))
 const Compare           = lazy(() => import('./pages/Compare'))
 const Analysis          = lazy(() => import('./pages/Analysis'))
+const Learn             = lazy(() => import('./pages/Learn'))
+const Coach             = lazy(() => import('./pages/Coach'))
+const SentimentScanner  = lazy(() => import('./pages/SentimentScanner'))
 
 // Gate that only allows render if a token is present in sessionStorage.
 // Used to wrap private routes inside the otherwise-public Layout.
@@ -86,12 +89,15 @@ export default function App() {
       <Route path="/" element={<Layout />}>
         {/* Public landing: market overview */}
         <Route index                          element={<S><Market /></S>} />
+        <Route path="learn"                   element={<S><Learn /></S>} />
+        <Route path="coach"                   element={<S><Coach /></S>} />
         <Route path="market"                  element={<S><Market /></S>} />
         <Route path="market/region/:id"       element={<S><Market /></S>} />
 
         {/* Public market data */}
         <Route path="stocks"                  element={<S><Stocks /></S>} />
         <Route path="screener"                element={<S><Screener /></S>} />
+        <Route path="scanner"                 element={<S><SentimentScanner /></S>} />
         <Route path="heatmap"                 element={<S><Heatmap /></S>} />
         <Route path="movers"                  element={<S><Movers /></S>} />
         <Route path="tape"                    element={<S><Tape /></S>} />

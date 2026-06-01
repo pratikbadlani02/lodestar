@@ -12,6 +12,7 @@ import {
 import { api } from '../lib/api'
 import { useSymbolPage } from '../lib/SymbolContext'
 import { chartColors, tooltipStyle } from '../lib/themeColors'
+import Term from '../components/Term'
 
 // ── Formatters ────────────────────────────────────────────────────
 const fmtNum = (v, d = 2) =>
@@ -684,22 +685,22 @@ export default function Analysis({ embedded = false }) {
           {/* Technicals */}
           <Section icon={Activity} title="Technical Indicators">
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-              <Stat label="Trend" value={(tech.trend || '—').toUpperCase()}
+              <Stat label={<Term id="trend">Trend</Term>} value={(tech.trend || '—').toUpperCase()}
                 cls={tech.trend === 'bullish' ? 'text-up' : tech.trend === 'bearish' ? 'text-down' : 'text-ink-2'} />
-              <Stat label="RSI (14)" value={fmt(tech.rsi14, 1)}
+              <Stat label={<Term id="rsi">RSI (14)</Term>} value={fmt(tech.rsi14, 1)}
                 sub={tech.rsi_signal}
                 cls={tech.rsi_signal === 'overbought' ? 'text-down' : tech.rsi_signal === 'oversold' ? 'text-up' : 'text-ink-1'} />
-              <Stat label="MACD" value={fmt(tech.macd, 3)}
+              <Stat label={<Term id="macd">MACD</Term>} value={fmt(tech.macd, 3)}
                 sub={tech.macd_hist != null ? `hist ${fmt(tech.macd_hist, 3)}` : ''}
                 cls={tech.macd != null && tech.macd_signal != null
                   ? (tech.macd > tech.macd_signal ? 'text-up' : 'text-down') : 'text-ink-1'} />
-              <Stat label="Bollinger Pos" value={fmtPct(tech.bb_position_pct, 0)}
+              <Stat label={<Term id="bollinger">Bollinger Pos</Term>} value={fmtPct(tech.bb_position_pct, 0)}
                 sub={tech.bb_position_pct != null
                   ? (tech.bb_position_pct > 80 ? 'near upper' : tech.bb_position_pct < 20 ? 'near lower' : 'mid-band')
                   : ''} />
-              <Stat label="SMA 20" value={fmt(tech.sma20)} />
-              <Stat label="SMA 50" value={fmt(tech.sma50)} />
-              <Stat label="SMA 200" value={fmt(tech.sma200)} />
+              <Stat label={<Term id="ma">SMA 20</Term>} value={fmt(tech.sma20)} />
+              <Stat label={<Term id="ma">SMA 50</Term>} value={fmt(tech.sma50)} />
+              <Stat label={<Term id="ma">SMA 200</Term>} value={fmt(tech.sma200)} />
               <Stat label="Above SMA50" value={tech.above_sma50 == null ? '—' : tech.above_sma50 ? 'Yes' : 'No'}
                 cls={tech.above_sma50 ? 'text-up' : 'text-down'} />
               <Stat label="Above SMA200" value={tech.above_sma200 == null ? '—' : tech.above_sma200 ? 'Yes' : 'No'}
@@ -713,13 +714,13 @@ export default function Analysis({ embedded = false }) {
           {/* Risk */}
           <Section icon={Shield} title="Risk & Volatility">
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
-              <Stat label="Vol (annualized)" value={fmtPct(risk.annualized_volatility_pct, 1)} />
-              <Stat label="Sharpe" value={fmt(risk.sharpe)}
+              <Stat label={<Term id="volatility">Vol (annualized)</Term>} value={fmtPct(risk.annualized_volatility_pct, 1)} />
+              <Stat label={<Term id="sharpe">Sharpe</Term>} value={fmt(risk.sharpe)}
                 cls={risk.sharpe >= 1 ? 'text-up' : risk.sharpe < 0 ? 'text-down' : 'text-ink-1'} />
               <Stat label="Sortino" value={fmt(risk.sortino)} />
-              <Stat label="Max Drawdown" value={fmtSignedPct(risk.max_drawdown_pct, 1)}
+              <Stat label={<Term id="maxdrawdown">Max Drawdown</Term>} value={fmtSignedPct(risk.max_drawdown_pct, 1)}
                 cls="text-down" />
-              <Stat label="Beta vs SPY" value={fmt(risk.beta_vs_spy)}
+              <Stat label={<Term id="beta">Beta vs SPY</Term>} value={fmt(risk.beta_vs_spy)}
                 sub={risk.beta_vs_spy != null
                   ? (risk.beta_vs_spy > 1.2 ? 'aggressive' : risk.beta_vs_spy < 0.8 ? 'defensive' : 'in-line')
                   : ''} />

@@ -14,6 +14,7 @@ import {
 } from '../components/ui/primitives'
 import { MiniEquityCurve, MagBar } from '../components/ui/charts'
 import EmptyState from '../components/ui/EmptyState'
+import ConceptOfDay from '../components/ConceptOfDay'
 
 // ── Macro tiles to show in the top strip ────────────────────────────
 // Indices come from ETF proxies (Alpaca returns equity snapshots only).
@@ -564,6 +565,8 @@ export default function Market() {
           <IconButton icon={RefreshCw} label="Refresh all" onClick={loadAll} className={loading ? 'animate-spin' : ''} />
         }
       />
+
+      <ConceptOfDay />
 
       {/* ── Index hero cards + market breadth ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-3">
