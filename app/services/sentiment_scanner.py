@@ -28,7 +28,7 @@ logger = structlog.get_logger()
 
 SCAN_TTL = 900          # ranked result cached 15 min
 LOCK_TTL = 180          # guards against duplicate concurrent scans
-MAX_CONCURRENCY = 5     # be gentle on yfinance/Alpaca during a scan
+MAX_CONCURRENCY = 3     # gentle on yfinance/Alpaca + the bounded Redis pool
 
 # Curated universes. No hardcoded universe existed in the codebase, so the
 # scanner ships a few liquid, well-covered baskets; callers may also pass a

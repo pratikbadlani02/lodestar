@@ -38,6 +38,10 @@ class Settings(BaseSettings):
 
     # ── Redis (control state + WebSocket pub/sub) ──────────────
     redis_url: str = "redis://localhost:6379/0"
+    # Cap the shared connection pool so concurrent work (e.g. the sentiment
+    # scanner fan-out) can't exceed a managed Redis provider's client limit
+    # ("max number of clients reached"). Tune via REDIS_MAX_CONNECTIONS.
+    redis_max_connections: int = 12
 
     # ── Alpaca Brokerage ───────────────────────────────────────
     alpaca_api_key: str = ""

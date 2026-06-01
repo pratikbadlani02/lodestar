@@ -22,12 +22,21 @@ _redis: aioredis.Redis | None = None
 async def get_redis() -> aioredis.Redis:
     global _redis
     if _redis is None:
-        _redis = await aioredis.from_url(
+        # Bounded BLOCKING pool: a managed Redis provider (Render) caps client
+        # connections, so an unbounded pool under concurrent load (e.g. the
+        # sentiment-scanner fan-out) throws "max number of clients reached".
+        # A blocking pool queues commands for a free connection instead of
+        # opening unlimited connections OR raising "Too many connections".
+        pool = aioredis.BlockingConnectionPool.from_url(
             settings.redis_url,
             decode_responses=True,
             socket_connect_timeout=10,
             socket_timeout=10,
+            max_connections=settings.redis_max_connections,
+            timeout=20,                 # max seconds to wait for a free connection
+            health_check_interval=30,
         )
+        _redis = aioredis.Redis(connection_pool=pool)
     return _redis
 
 
