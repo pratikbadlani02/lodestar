@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, X, AlertCircle, CheckCircle2, Info, AlertTriangle } from 'lucide-react'
 import { signClass, fmt, fmtSigned, fmtSignedPct } from './format'
+import { activeCurrency } from './format'
 
 // ── Card ─────────────────────────────────────────────────────────
 // Subtle gradient + soft border + inner highlight; optional hover lift.
@@ -88,13 +89,13 @@ export function DataCell({ value, formatter = fmt, decimals = 2, signed = false,
 }
 
 // ── ChangePill — arrow + abs + percent in one chip ───────────────
-export function ChangePill({ value, abs, prefix = '$' }) {
+export function ChangePill({ value, abs, prefix }) {
   if (value == null) return <span className="num-flat font-mono">—</span>
   const up = Number(value) >= 0
   return (
     <span className={`inline-flex items-baseline gap-1.5 font-mono tabular ${up ? 'text-up' : 'text-down'}`}>
       {abs != null && (
-        <span className="font-semibold">{up ? '+' : ''}{prefix}{Math.abs(Number(abs)).toFixed(2)}</span>
+        <span className="font-semibold">{up ? '+' : ''}{prefix ?? activeCurrency()}{Math.abs(Number(abs)).toFixed(2)}</span>
       )}
       <span className="text-xs opacity-90">({up ? '+' : ''}{Number(value).toFixed(2)}%)</span>
     </span>

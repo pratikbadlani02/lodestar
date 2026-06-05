@@ -18,6 +18,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { api } from '../lib/api'
+import { activeCurrency } from './ui/format'
 
 // ─── Candle size definitions ──────────────────────────────────────────────────
 const CANDLE_SIZES = [
@@ -1030,10 +1031,10 @@ export default function ChartWidget({ symbol, height = 420, compact = false }) {
         {/* OHLCV crosshair display */}
         {crosshairData && (
           <div className="flex gap-3 text-[10px] font-mono text-ink-3 ml-2">
-            <span>O: <span className="text-ink-2">${crosshairData.o?.toFixed(2)}</span></span>
-            <span>H: <span className="text-up">${crosshairData.h?.toFixed(2)}</span></span>
-            <span>L: <span className="text-down">${crosshairData.l?.toFixed(2)}</span></span>
-            <span>C: <span className="text-ink-2">${crosshairData.c?.toFixed(2)}</span></span>
+            <span>O: <span className="text-ink-2">{activeCurrency()}{crosshairData.o?.toFixed(2)}</span></span>
+            <span>H: <span className="text-up">{activeCurrency()}{crosshairData.h?.toFixed(2)}</span></span>
+            <span>L: <span className="text-down">{activeCurrency()}{crosshairData.l?.toFixed(2)}</span></span>
+            <span>C: <span className="text-ink-2">{activeCurrency()}{crosshairData.c?.toFixed(2)}</span></span>
             <span>
               V:{' '}
               <span className="text-ink-2">

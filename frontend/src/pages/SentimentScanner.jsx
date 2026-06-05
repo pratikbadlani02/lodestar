@@ -7,6 +7,7 @@ import { useMarket } from '../lib/MarketContext'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
 import { PageShell, PageHeader, Card, SectionHeader, Pill, Select, Button, IconButton, Alert } from '../components/ui/primitives'
 import { PnlCell, HeatRing } from '../components/ui/charts'
+import { activeCurrency } from '../components/ui/format'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Sentiment Scanner — ranks a universe into "top picks" by fusing five signals
@@ -156,7 +157,7 @@ export default function SentimentScanner() {
                         <span className="text-2xs text-ink-5">#{p.rank}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-ink-3 font-mono">${fmtPrice(p.last_price)}</span>
+                        <span className="text-xs text-ink-3 font-mono">{activeCurrency()}{fmtPrice(p.last_price)}</span>
                         {p.change_1d != null && <PnlCell value={p.change_1d} />}
                       </div>
                     </div>

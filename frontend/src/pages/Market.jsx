@@ -14,7 +14,7 @@ import {
   TabStrip,
 } from '../components/ui/primitives'
 import { MiniEquityCurve, MagBar } from '../components/ui/charts'
-import { fmtPrice } from '../components/ui/format'
+import { fmtPrice, activeCurrency } from '../components/ui/format'
 import EmptyState from '../components/ui/EmptyState'
 import ConceptOfDay from '../components/ConceptOfDay'
 
@@ -326,7 +326,7 @@ function MoversTable({ rows, onSymbolClick, showVolume = false }) {
               <div className="mt-1 w-24"><MagBar value={pct} scale={10} height={4} /></div>
             </div>
             <div className="text-right">
-              <div className="font-mono tabular text-sm text-ink-1">${fmt(m.price)}</div>
+              <div className="font-mono tabular text-sm text-ink-1">{activeCurrency()}{fmt(m.price)}</div>
               <div className={`font-mono tabular text-2xs font-semibold ${up ? 'text-up' : 'text-down'}`}>
                 {showVolume && m.volume != null
                   ? <span className="text-ink-4 mr-1.5">{fmtBig(m.volume)}</span>

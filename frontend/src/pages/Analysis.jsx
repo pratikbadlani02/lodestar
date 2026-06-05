@@ -13,6 +13,7 @@ import { api } from '../lib/api'
 import { useSymbolPage } from '../lib/SymbolContext'
 import { chartColors, tooltipStyle } from '../lib/themeColors'
 import Term from '../components/Term'
+import { activeCurrency } from '../components/ui/format'
 
 // ── Formatters ────────────────────────────────────────────────────
 const fmtNum = (v, d = 2) =>
@@ -176,12 +177,12 @@ function ImpliedMovePanel({ data, last }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
       <Stat label="Expected Move" value={`±${fmt(data.implied_move_pct)}%`}
-        sub={`±$${fmt(data.implied_move_usd)}`} cls="text-up" big />
+        sub={`±${activeCurrency()}${fmt(data.implied_move_usd)}`} cls="text-up" big />
       <Stat label="Expiry" value={data.expiry || '—'}
         sub={data.next_earnings ? `Earnings ${new Date(data.next_earnings).toLocaleDateString()}` : 'No earnings nearby'} />
-      <Stat label="ATM Strike" value={`$${fmt(data.atm_strike)}`} />
-      <Stat label="Low Band" value={`$${fmt(data.expected_low)}`} cls="text-down" />
-      <Stat label="High Band" value={`$${fmt(data.expected_high)}`} cls="text-up" />
+      <Stat label="ATM Strike" value={`${activeCurrency()}${fmt(data.atm_strike)}`} />
+      <Stat label="Low Band" value={`${activeCurrency()}${fmt(data.expected_low)}`} cls="text-down" />
+      <Stat label="High Band" value={`${activeCurrency()}${fmt(data.expected_high)}`} cls="text-up" />
     </div>
   )
 }
@@ -206,13 +207,13 @@ function InsiderFlowPanel({ data }) {
         <Stat label="Sells (6m)" value={w6.sells ?? 0} cls="text-down" />
         <Stat label="Net Shares (6m)" value={fmtBig(w6.net_shares)}
           cls={(w6.net_shares ?? 0) >= 0 ? 'text-up' : 'text-down'} />
-        <Stat label="Net Value (6m)" value={`$${fmtBig(w6.net_value)}`}
+        <Stat label="Net Value (6m)" value={`${activeCurrency()}${fmtBig(w6.net_value)}`}
           cls={(w6.net_value ?? 0) >= 0 ? 'text-up' : 'text-down'} />
         <Stat label="Buys (1y)" value={w12.buys ?? 0} />
         <Stat label="Sells (1y)" value={w12.sells ?? 0} />
         <Stat label="Net Shares (1y)" value={fmtBig(w12.net_shares)}
           cls={(w12.net_shares ?? 0) >= 0 ? 'text-up' : 'text-down'} />
-        <Stat label="Net Value (1y)" value={`$${fmtBig(w12.net_value)}`}
+        <Stat label="Net Value (1y)" value={`${activeCurrency()}${fmtBig(w12.net_value)}`}
           cls={(w12.net_value ?? 0) >= 0 ? 'text-up' : 'text-down'} />
       </div>
     </div>
@@ -376,13 +377,13 @@ function TargetBar({ low, mean, high, current }) {
           <div
             className="absolute -top-1 w-0.5 h-12 bg-surf-3"
             style={{ left: pos(mean) }}
-            title={`Mean target $${mean.toFixed(2)}`}
+            title={`Mean target ${activeCurrency()}${mean.toFixed(2)}`}
           />
         )}
         <div
           className="absolute -top-2 w-2 h-14 bg-up rounded -ml-1 ring-2 ring-up"
           style={{ left: pos(current) }}
-          title={`Current $${current.toFixed(2)}`}
+          title={`Current ${activeCurrency()}${current.toFixed(2)}`}
         />
       </div>
       <div className="flex justify-between text-xs font-mono text-ink-3">
@@ -586,7 +587,7 @@ export default function Analysis({ embedded = false }) {
                 </div>
               )}
               <div className="flex items-baseline gap-4 mt-4">
-                <span className="text-4xl font-mono tabular font-bold text-ink-1">${fmt(data.last_price)}</span>
+                <span className="text-4xl font-mono tabular font-bold text-ink-1">{activeCurrency()}{fmt(data.last_price)}</span>
                 <span className={`font-mono tabular text-lg ${colorForPct(dayChange)}`}>
                   {dayChange == null ? '' : `${dayChange >= 0 ? '+' : ''}${fmt(dayChange)}%`}
                   <span className="text-xs text-ink-4 ml-2">today</span>
@@ -741,12 +742,12 @@ export default function Analysis({ embedded = false }) {
               current={data.last_price}
             />
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4">
-              <Stat label="Mean Target" value={`$${fmt(targets.target_mean)}`}
+              <Stat label="Mean Target" value={`${activeCurrency()}${fmt(targets.target_mean)}`}
                 sub={targets.target_mean_upside_pct != null ? fmtSignedPct(targets.target_mean_upside_pct) : ''}
                 cls={colorForPct(targets.target_mean_upside_pct)} />
-              <Stat label="High Target" value={`$${fmt(targets.target_high)}`}
+              <Stat label="High Target" value={`${activeCurrency()}${fmt(targets.target_high)}`}
                 sub={targets.target_high_upside_pct != null ? fmtSignedPct(targets.target_high_upside_pct) : ''} />
-              <Stat label="Low Target" value={`$${fmt(targets.target_low)}`}
+              <Stat label="Low Target" value={`${activeCurrency()}${fmt(targets.target_low)}`}
                 sub={targets.target_low_upside_pct != null ? fmtSignedPct(targets.target_low_upside_pct) : ''} />
               <Stat label="Rating" value={(targets.recommendation_key || '—').toUpperCase()}
                 cls={['strong_buy', 'buy'].includes(targets.recommendation_key) ? 'text-up'

@@ -8,6 +8,7 @@ import {
 import { api } from '../lib/api'
 import { Card, SectionHeader, Button, Pill, Alert, Input } from './ui/primitives'
 import Term from './Term'
+import { activeCurrency } from './ui/format'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Coach Mode — a beginner-safe guided trade. Fetches REAL analysis data
@@ -31,7 +32,7 @@ const ALLOCS = [
   { key: 'bold', label: 'Bold',     pct: 0.25 },
 ]
 
-const money = (n) => '$' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
+const money = (n) => activeCurrency() + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
 const round1 = (n) => (n == null ? null : Math.round(Number(n) * 10) / 10)
 
 export default function CoachTrade({ onComplete, onBack }) {

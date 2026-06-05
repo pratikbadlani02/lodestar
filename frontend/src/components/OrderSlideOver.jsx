@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { X, Send } from 'lucide-react'
 import { useSymbol } from '../lib/SymbolContext'
 import { api } from '../lib/api'
-import { fmt, fmtSigned, fmtSignedPct, signClass } from './ui/format'
+import { fmt, fmtSigned, fmtSignedPct, signClass, activeCurrency } from './ui/format'
 
 export default function OrderSlideOver() {
   const { symbol } = useSymbol()
@@ -133,7 +133,7 @@ export default function OrderSlideOver() {
             <div className="flex items-baseline justify-between">
               <span className="font-mono font-semibold text-ink-1">{symbol}</span>
               <span className="font-mono tabular text-lg text-ink-1 font-semibold">
-                {snap?.last != null ? `$${fmt(snap.last)}` : '—'}
+                {snap?.last != null ? `${activeCurrency()}${fmt(snap.last)}` : '—'}
               </span>
             </div>
             {snap?.change != null && (
@@ -144,8 +144,8 @@ export default function OrderSlideOver() {
               </div>
             )}
             <div className="flex justify-between text-2xs text-ink-4 font-mono pt-1.5 border-t border-white/[0.04]">
-              <span>Bid {snap?.bid != null ? `$${fmt(snap.bid)}` : '—'}</span>
-              <span>Ask {snap?.ask != null ? `$${fmt(snap.ask)}` : '—'}</span>
+              <span>Bid {snap?.bid != null ? `${activeCurrency()}${fmt(snap.bid)}` : '—'}</span>
+              <span>Ask {snap?.ask != null ? `${activeCurrency()}${fmt(snap.ask)}` : '—'}</span>
             </div>
           </div>
 
@@ -238,7 +238,7 @@ export default function OrderSlideOver() {
 
           <div className="bg-surf-2 border border-white/[0.04] rounded-lg px-2.5 py-1.5 text-2xs font-mono tabular text-ink-2 flex justify-between">
             <span>Est. notional</span>
-            <span>${fmt(estCost)}</span>
+            <span>{activeCurrency()}{fmt(estCost)}</span>
           </div>
 
           {err && <div className="bg-down/10 border border-down/30 text-down text-xs rounded-lg px-2.5 py-1.5">{err}</div>}

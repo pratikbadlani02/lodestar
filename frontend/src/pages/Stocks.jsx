@@ -11,7 +11,7 @@ import ChartWidget from '../components/ChartWidget'
 import SymbolHeader from '../components/SymbolHeader'
 import { Card, SectionHeader, Sparkline } from '../components/ui/primitives'
 import { PnlCell } from '../components/ui/charts'
-import { fmt, fmtBig, fmtNum, fmtPct, fmtSignedPct } from '../components/ui/format'
+import { fmt, fmtBig, fmtNum, fmtPct, fmtSignedPct, activeCurrency } from '../components/ui/format'
 import EmptyState from '../components/ui/EmptyState'
 
 // Research views embedded as tabs (lazy so they don't bloat the Stocks chunk).
@@ -28,7 +28,7 @@ const RESEARCH_TABS = {
 }
 
 // ── Local formatters ────────────────────────────────────────────
-const fmtP = (n) => (n == null ? '—' : `$${Number(n).toFixed(2)}`)
+const fmtP = (n) => (n == null ? '—' : `${activeCurrency()}${Number(n).toFixed(2)}`)
 const fmtVol = (v) => {
   if (v == null) return '—'
   const a = Math.abs(v)
@@ -232,7 +232,7 @@ function QuotePanel({ snap }) {
           </div>
           <div className="bg-white/[0.025] border border-white/[0.06] rounded-lg p-2.5">
             <div className="text-2xs uppercase tracking-wider text-ink-4">Spread</div>
-            <div className="text-sm font-mono tabular font-bold text-ink-1 mt-1">{spread != null ? `$${spread.toFixed(3)}` : '—'}</div>
+            <div className="text-sm font-mono tabular font-bold text-ink-1 mt-1">{spread != null ? `${activeCurrency()}${spread.toFixed(3)}` : '—'}</div>
           </div>
         </div>
         <div className="bg-surf-2/40 rounded-lg px-3 py-2">
@@ -247,7 +247,7 @@ function QuotePanel({ snap }) {
             value={change != null ? `${change >= 0 ? '+' : ''}${change.toFixed(2)} (${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2)}%)` : '—'}
             cls={change != null ? (change >= 0 ? 'text-up' : 'text-down') : ''}
           />
-          <StatRow label="Range (H-L)" value={dayRange != null ? `$${dayRange.toFixed(2)}` : '—'} />
+          <StatRow label="Range (H-L)" value={dayRange != null ? `${activeCurrency()}${dayRange.toFixed(2)}` : '—'} />
           <StatRow label="Volume" value={fmtVol(volume)} />
         </div>
         {rangePos != null && (
@@ -362,7 +362,7 @@ function PositionCard({ position, symbol }) {
           </div>
           <div className="bg-white/[0.025] border border-white/[0.06] rounded-lg p-2.5">
             <div className="text-2xs uppercase tracking-wider text-ink-4">Market Value</div>
-            <div className="mt-1 text-sm font-mono tabular text-ink-1 font-semibold">${(qty * last).toFixed(2)}</div>
+            <div className="mt-1 text-sm font-mono tabular text-ink-1 font-semibold">{activeCurrency()}{(qty * last).toFixed(2)}</div>
           </div>
           <div className="bg-white/[0.025] border border-white/[0.06] rounded-lg p-2.5">
             <div className="text-2xs uppercase tracking-wider text-ink-4">Unrealized P/L</div>

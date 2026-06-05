@@ -196,7 +196,7 @@ export default function Dividends({ embedded = false }) {
                     return (
                       <tr key={b.year}>
                         <td className="font-mono text-ink-2">{b.year}</td>
-                        <td className="text-right font-mono tabular text-ink-1 font-semibold">${b.total.toFixed(4)}</td>
+                        <td className="text-right font-mono tabular text-ink-1 font-semibold">{activeCurrency()}{b.total.toFixed(4)}</td>
                         <td className="text-right">{yoy != null && <PnlCell value={yoy} scale={20} />}</td>
                       </tr>
                     )

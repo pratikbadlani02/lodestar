@@ -10,6 +10,7 @@ import SymbolHeader from '../components/SymbolHeader'
 import { Card, Section } from '../components/ui/primitives'
 import { Donut, PnlCell } from '../components/ui/charts'
 import EmptyState from '../components/ui/EmptyState'
+import { activeCurrency } from '../components/ui/format'
 
 const fmtBig = (v) => {
   if (v == null) return '—'
@@ -282,16 +283,16 @@ export default function Insiders({ embedded = false }) {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-2xs">
                       <FlowStat label="Buys" tone="text-up"
                         value={fmtBig(flowSummary.buyShares)}
-                        sub={`$${fmtBig(flowSummary.buyValue)}`} />
+                        sub={`${activeCurrency()}${fmtBig(flowSummary.buyValue)}`} />
                       <FlowStat label="Sells" tone="text-down"
                         value={fmtBig(Math.abs(flowSummary.sellShares))}
-                        sub={`$${fmtBig(Math.abs(flowSummary.sellValue))}`} />
+                        sub={`${activeCurrency()}${fmtBig(Math.abs(flowSummary.sellValue))}`} />
                       <FlowStat label="Net Shares"
                         tone={flowSummary.netShares >= 0 ? 'text-up' : 'text-down'}
                         value={`${flowSummary.netShares >= 0 ? '+' : ''}${fmtBig(flowSummary.netShares)}`} />
                       <FlowStat label="Net $"
                         tone={flowSummary.netValue >= 0 ? 'text-up' : 'text-down'}
-                        value={`${flowSummary.netValue >= 0 ? '+' : ''}$${fmtBig(Math.abs(flowSummary.netValue))}`} />
+                        value={`${flowSummary.netValue >= 0 ? '+' : ''}${activeCurrency()}${fmtBig(Math.abs(flowSummary.netValue))}`} />
                     </div>
                   )}
                 </>

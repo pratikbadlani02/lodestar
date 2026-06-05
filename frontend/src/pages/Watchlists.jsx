@@ -10,10 +10,11 @@ import {
   Input, Select, FormField, Alert, SkeletonRows,
 } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
+import { activeCurrency } from '../components/ui/format'
 
 function fmtPrice(n) {
   if (n === null || n === undefined) return '—'
-  return `$${Number(n).toFixed(2)}`
+  return `${activeCurrency()}${Number(n).toFixed(2)}`
 }
 function fmtVol(n) {
   if (!n) return '—'

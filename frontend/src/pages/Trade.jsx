@@ -275,7 +275,7 @@ export default function Trade({ isPaper = false }) {
           {selectedSymbol && (
             <>
               <span className="font-mono text-base font-semibold text-ink-2">
-                {selQuote.price != null ? `$${Number(selQuote.price).toFixed(2)}` : '—'}
+                {selQuote.price != null ? `${activeCurrency()}${Number(selQuote.price).toFixed(2)}` : '—'}
               </span>
               {selChg && (
                 <span className={`text-xs font-mono font-semibold ${selChg.up ? 'text-up' : 'text-down'}`}>

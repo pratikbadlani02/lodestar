@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSymbol } from '../lib/SymbolContext'
-import { fmt, fmtSigned, fmtSignedPct, fmtBig } from './ui/format'
+import { fmt, fmtSigned, fmtSignedPct, fmtBig, activeCurrency } from './ui/format'
 import { MiniEquityCurve, PnlCell } from './ui/charts'
 import { Card } from './ui/primitives'
 
@@ -153,7 +153,7 @@ export default function SymbolHeader({ activePage }) {
         {/* Price + change */}
         <div className="flex items-baseline gap-3">
           <span className="text-2xl font-mono tabular font-bold text-ink-1">
-            {snap?.last != null ? `$${fmt(snap.last)}` : '—'}
+            {snap?.last != null ? `${activeCurrency()}${fmt(snap.last)}` : '—'}
           </span>
           {snap?.change != null && (
             <span className={`inline-flex items-baseline gap-1 font-mono tabular text-sm font-semibold ${up ? 'text-up' : 'text-down'}`}>

@@ -7,6 +7,7 @@ import {
 } from '../components/ui/primitives'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
 import { useMarket } from '../lib/MarketContext'
+import { activeCurrency } from '../components/ui/format'
 
 // Curated megacap-by-sector list. Edit freely — Heatmap renders whatever symbols
 // have a snapshot returned by /market/snapshots. One map per market.
@@ -540,10 +541,10 @@ function HoverTip({ hover }) {
           <span className={`font-semibold ${it.pct >= 0 ? 'text-up' : 'text-down'}`}>{fmtPct(it.pct)}</span>
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-          <span className="text-ink-4">Last</span><span>${it.last?.toFixed(2) ?? '—'}</span>
-          <span className="text-ink-4">Open</span><span>${it.open?.toFixed(2) ?? '—'}</span>
-          <span className="text-ink-4">High</span><span>${it.high?.toFixed(2) ?? '—'}</span>
-          <span className="text-ink-4">Low</span><span>${it.low?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">Last</span><span>{activeCurrency()}{it.last?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">Open</span><span>{activeCurrency()}{it.open?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">High</span><span>{activeCurrency()}{it.high?.toFixed(2) ?? '—'}</span>
+          <span className="text-ink-4">Low</span><span>{activeCurrency()}{it.low?.toFixed(2) ?? '—'}</span>
           <span className="text-ink-4">Vol</span><span>{fmtVol(it.vol)}</span>
         </div>
       </div>
@@ -569,10 +570,10 @@ function GridTile({ data, onClick, onContextMenu }) {
         <div className="card-surface px-3 py-2 text-2xs font-mono tabular whitespace-nowrap text-ink-1 shadow-2xl">
           <div className="font-display font-semibold text-sm text-ink-1 mb-1">{sym}</div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-            <span className="text-ink-4">Last</span><span>${last?.toFixed(2) ?? '—'}</span>
-            <span className="text-ink-4">Open</span><span>${open?.toFixed(2) ?? '—'}</span>
-            <span className="text-ink-4">High</span><span>${high?.toFixed(2) ?? '—'}</span>
-            <span className="text-ink-4">Low</span><span>${low?.toFixed(2) ?? '—'}</span>
+            <span className="text-ink-4">Last</span><span>{activeCurrency()}{last?.toFixed(2) ?? '—'}</span>
+            <span className="text-ink-4">Open</span><span>{activeCurrency()}{open?.toFixed(2) ?? '—'}</span>
+            <span className="text-ink-4">High</span><span>{activeCurrency()}{high?.toFixed(2) ?? '—'}</span>
+            <span className="text-ink-4">Low</span><span>{activeCurrency()}{low?.toFixed(2) ?? '—'}</span>
             <span className="text-ink-4">Vol</span><span>{fmtVol(vol)}</span>
             <span className="text-ink-4">Δ</span>
             <span className={pct >= 0 ? 'text-up' : 'text-down'}>{fmtPct(pct)}</span>

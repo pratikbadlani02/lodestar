@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { Wifi, WifiOff, Clock, DollarSign, Zap } from 'lucide-react'
 import { api } from '../lib/api'
-import { fmt, fmtBig, fmtSignedPct, signClass } from './ui/format'
+import { fmt, fmtBig, fmtSignedPct, signClass, activeCurrency } from './ui/format'
 
 // ── Market session helper ───────────────────────────────────────
 // All times in NY (ET). Returns one of pre / regular / post / closed
@@ -138,8 +138,8 @@ export default function StatusBar({ control, health, authed = false }) {
       <div className="flex-1 hidden lg:flex items-center justify-center gap-4 text-ink-3 min-w-0">
         {equity != null && (
           <>
-            <span><span className="text-ink-5 mr-1">EQ</span><span className="text-ink-1">${fmtBig(equity)}</span></span>
-            <span><span className="text-ink-5 mr-1">BP</span>${fmtBig(bp)}</span>
+            <span><span className="text-ink-5 mr-1">EQ</span><span className="text-ink-1">{activeCurrency()}{fmtBig(equity)}</span></span>
+            <span><span className="text-ink-5 mr-1">BP</span>{activeCurrency()}{fmtBig(bp)}</span>
             {dayPnl != null && (
               <span className="inline-flex items-center gap-1">
                 <span className="text-ink-5">PnL</span>

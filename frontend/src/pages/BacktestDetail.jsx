@@ -121,7 +121,7 @@ export default function BacktestDetail() {
                   <Stat label="Total P/L" value={money(mm.totalPL)} variant={mm.totalPL >= 0 ? 'up' : 'down'} />
                   <Stat label="Avg / Session" value={money(mm.avg)} variant={mm.avg >= 0 ? 'up' : 'down'} />
                   <Stat label="Best / Worst Day" value={`${money(mm.best)} / ${money(mm.worst)}`} />
-                  <Stat label="Avg P/L per Fill" value={`$${mm.plPerFill.toFixed(3)}`} />
+                  <Stat label="Avg P/L per Fill" value={`${ccy}${mm.plPerFill.toFixed(3)}`} />
                 </StatGrid>
                 <div>
                   <div className="text-2xs uppercase tracking-wider text-ink-4 mb-1">Daily session P/L</div>
@@ -166,11 +166,11 @@ export default function BacktestDetail() {
                         <td className="font-mono font-semibold">{t.symbol}</td>
                         <td className="font-mono text-ink-3">{t.entry_time ? t.entry_time.slice(0, 10) : '—'}</td>
                         <td className="font-mono text-ink-3">{t.exit_time ? t.exit_time.slice(0, 10) : '—'}</td>
-                        <td className="text-right font-mono tabular">${Number(t.entry_price).toFixed(2)}</td>
-                        <td className="text-right font-mono tabular">{t.exit_price ? `$${Number(t.exit_price).toFixed(2)}` : '—'}</td>
+                        <td className="text-right font-mono tabular">{ccy}{Number(t.entry_price).toFixed(2)}</td>
+                        <td className="text-right font-mono tabular">{t.exit_price ? `${ccy}${Number(t.exit_price).toFixed(2)}` : '—'}</td>
                         <td className="text-right font-mono tabular">{Number(t.qty).toFixed(0)}</td>
                         <td className={`text-right font-mono tabular font-semibold ${Number(t.pnl) >= 0 ? 'text-up' : 'text-down'}`}>
-                          {t.pnl ? `$${Number(t.pnl).toFixed(2)}` : '—'}
+                          {t.pnl ? `${ccy}${Number(t.pnl).toFixed(2)}` : '—'}
                         </td>
                         <td className={`text-right font-mono tabular ${Number(t.pnl_pct) >= 0 ? 'text-up' : 'text-down'}`}>
                           {t.pnl_pct ? `${Number(t.pnl_pct).toFixed(2)}%` : '—'}
