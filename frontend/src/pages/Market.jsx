@@ -7,24 +7,26 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSymbol } from '../lib/SymbolContext'
+import { useMarket } from '../lib/MarketContext'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
 import {
   PageShell, PageHeader, Card, SectionHeader, IconButton, Input, Pill, SkeletonRows,
   TabStrip,
 } from '../components/ui/primitives'
 import { MiniEquityCurve, MagBar } from '../components/ui/charts'
+import { fmtPrice } from '../components/ui/format'
 import EmptyState from '../components/ui/EmptyState'
 import ConceptOfDay from '../components/ConceptOfDay'
 
 // ── Macro tiles to show in the top strip ────────────────────────────
 // Indices come from ETF proxies (Alpaca returns equity snapshots only).
-const INDEX_PROXIES = [
+const INDEX_PROXIES_US = [
   { symbol: 'SPY', label: 'S&P 500'      },
   { symbol: 'QQQ', label: 'Nasdaq 100'   },
   { symbol: 'IWM', label: 'Russell 2000' },
   { symbol: 'DIA', label: 'Dow Jones'    },
 ]
-const MACRO_PROXIES = [
+const MACRO_PROXIES_US = [
   { symbol: 'VIX',  label: 'Volatility'  },   // CBOE volatility (may not have a snapshot — show "—")
   { symbol: 'UVXY', label: 'VIX 2x ETF'  },   // fallback liquid proxy
   { symbol: 'GLD',  label: 'Gold'        },
@@ -40,7 +42,7 @@ const CRYPTO_PROXIES = [
 // SPDR sector ETFs — one liquid proxy per GICS sector. Webull's market page
 // leads with a sector-performance panel; these single snapshots give a clean
 // day-change read per sector without fetching dozens of constituents.
-const SECTOR_ETFS = [
+const SECTOR_ETFS_US = [
   { symbol: 'XLK',  label: 'Technology'      },
   { symbol: 'XLC',  label: 'Communication'   },
   { symbol: 'XLY',  label: 'Cons. Disc.'     },
@@ -53,13 +55,44 @@ const SECTOR_ETFS = [
   { symbol: 'XLRE', label: 'Real Estate'     },
   { symbol: 'XLB',  label: 'Materials'       },
 ]
-const NEWS_PRESETS = [
+const NEWS_PRESETS_US = [
   { id: 'all',     label: 'All news',    symbols: null },
   { id: 'megacap', label: 'Megacap',     symbols: 'AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AVGO' },
   { id: 'banks',   label: 'Banks',       symbols: 'JPM,BAC,WFC,GS,MS,C,BLK' },
   { id: 'energy',  label: 'Energy',      symbols: 'XOM,CVX,COP,SLB,OXY' },
   { id: 'crypto',  label: 'Crypto',      symbols: 'COIN,MSTR,BITO,MARA,RIOT' },
   { id: 'ai',      label: 'AI / Chips',  symbols: 'NVDA,AMD,AVGO,TSM,SMCI,PLTR,ARM' },
+]
+
+// ── India (NSE) equivalents ─────────────────────────────────────────
+const INDEX_PROXIES_IN = [
+  { symbol: '^NSEI',     label: 'NIFTY 50'   },
+  { symbol: '^BSESN',    label: 'SENSEX'     },
+  { symbol: '^NSEBANK',  label: 'Bank Nifty' },
+  { symbol: '^INDIAVIX', label: 'India VIX'  },
+]
+const MACRO_PROXIES_IN = [
+  { symbol: '^INDIAVIX',  label: 'India VIX' },
+  { symbol: 'GOLDBEES.NS', label: 'Gold ETF' },
+  { symbol: 'NIFTYBEES.NS', label: 'Nifty ETF' },
+  { symbol: 'RELIANCE.NS', label: 'Reliance'  },
+]
+const SECTOR_ETFS_IN = [
+  { symbol: '^CNXIT',     label: 'IT'        },
+  { symbol: '^NSEBANK',   label: 'Bank'      },
+  { symbol: '^CNXAUTO',   label: 'Auto'      },
+  { symbol: '^CNXPHARMA', label: 'Pharma'    },
+  { symbol: '^CNXFMCG',   label: 'FMCG'      },
+  { symbol: '^CNXMETAL',  label: 'Metal'     },
+  { symbol: '^CNXENERGY', label: 'Energy'    },
+  { symbol: '^CNXREALTY', label: 'Realty'    },
+]
+const NEWS_PRESETS_IN = [
+  { id: 'all',   label: 'All news', symbols: null },
+  { id: 'nifty', label: 'Nifty',    symbols: 'RELIANCE.NS,TCS.NS,HDFCBANK.NS,INFY.NS,ICICIBANK.NS' },
+  { id: 'banks', label: 'Banks',    symbols: 'HDFCBANK.NS,ICICIBANK.NS,SBIN.NS,KOTAKBANK.NS,AXISBANK.NS' },
+  { id: 'it',    label: 'IT',       symbols: 'TCS.NS,INFY.NS,HCLTECH.NS,WIPRO.NS,TECHM.NS' },
+  { id: 'auto',  label: 'Auto',     symbols: 'MARUTI.NS,TATAMOTORS.NS,M&M.NS,EICHERMOT.NS,HEROMOTOCO.NS' },
 ]
 
 // Sentiment is a quick lexical heuristic. The backend doesn't tag articles, so
@@ -104,8 +137,17 @@ function fmtAgo(ts) {
   return `${Math.floor(h / 24)}d ago`
 }
 
-// Market session label — purely client-side, US/Eastern aware.
-function sessionLabel() {
+// Market session label — purely client-side, market-aware (US/Eastern, IN/IST).
+function sessionLabel(market = 'us') {
+  if (market === 'in') {
+    const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    const day = ist.getDay()
+    if (day === 0 || day === 6) return { label: 'Closed (weekend)', variant: 'neutral' }
+    const m = ist.getHours() * 60 + ist.getMinutes()
+    if (m < 9 * 60 + 15) return { label: 'Pre-open', variant: 'warn' }
+    if (m <= 15 * 60 + 30) return { label: 'Open', variant: 'up' }
+    return { label: 'Closed', variant: 'neutral' }
+  }
   const now = new Date()
   const est = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
   const day = est.getDay()                  // 0 Sun, 6 Sat
@@ -145,7 +187,7 @@ function MacroTile({ label, symbol, snap, onClick }) {
       <div className="font-mono text-2xs text-ink-5 mt-0.5">{symbol}</div>
       <div className="flex items-baseline justify-between mt-1.5 gap-2">
         <span className="font-mono tabular text-sm font-bold text-ink-1">
-          {last != null ? `$${fmt(last)}` : '—'}
+          {last != null ? fmtPrice(last) : '—'}
         </span>
         {pct != null && (
           <span className={`font-mono tabular text-xs font-semibold ${up ? 'text-up' : 'text-down'}`}>
@@ -382,7 +424,15 @@ function useTrendingTickers(articles, limit = 8) {
 export default function Market() {
   const navigate = useNavigate()
   const { setSymbol } = useSymbol()
+  const { market } = useMarket()
   const ctx = useSymbolContextMenu()
+
+  // Market-scoped universes (shadow the module-level US defaults).
+  const isIn = market === 'in'
+  const INDEX_PROXIES = isIn ? INDEX_PROXIES_IN : INDEX_PROXIES_US
+  const MACRO_PROXIES = isIn ? MACRO_PROXIES_IN : MACRO_PROXIES_US
+  const SECTOR_ETFS   = isIn ? SECTOR_ETFS_IN   : SECTOR_ETFS_US
+  const NEWS_PRESETS  = isIn ? NEWS_PRESETS_IN  : NEWS_PRESETS_US
 
   const [snapshots, setSnapshots]       = useState({})
   const [cryptoSnaps, setCryptoSnaps]   = useState({})
@@ -400,7 +450,7 @@ export default function Market() {
   const [updatedAt, setUpdatedAt]       = useState(null)
   const refreshTimer = useRef(null)
 
-  const session = sessionLabel()
+  const session = sessionLabel(market)
 
   function openSymbol(sym) {
     if (!sym) return
@@ -419,6 +469,9 @@ export default function Market() {
   // Intraday-ish sparklines for the index hero cards. Daily closes over ~6 weeks
   // give a clean trend line; fetched once per full refresh (not on the 30s tick).
   async function loadSparks() {
+    // Index sparklines come from the US OHLCV cache; Indian indices (^NSEI, …)
+    // aren't on that feed, so skip the cosmetic sparkline there.
+    if (isIn) { setSparks({}); return }
     try {
       const results = await Promise.allSettled(
         INDEX_PROXIES.map((x) => api.getOhlcv(x.symbol, 42, '1d'))
@@ -482,7 +535,8 @@ export default function Market() {
     setLoading(false)
   }
 
-  // Initial load + auto-refresh — macro every 30s, news every 60s
+  // Initial load + auto-refresh — macro every 30s, news every 60s.
+  // Re-runs when the market switches so every panel reflects the selection.
   useEffect(() => {
     loadAll()
     refreshTimer.current = setInterval(() => {
@@ -490,7 +544,8 @@ export default function Market() {
     }, 30000)
     const newsTimer = setInterval(() => loadNews(), 60000)
     return () => { clearInterval(refreshTimer.current); clearInterval(newsTimer) }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market])
 
   // Reload news when preset changes
   useEffect(() => { loadNews(newsPreset, '') }, [newsPreset])

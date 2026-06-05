@@ -74,6 +74,36 @@ UNIVERSES: dict[str, dict[str, Any]] = {
         "symbols": ["SPY", "QQQ", "DIA", "IWM", "XLK", "XLF", "XLE", "XLV",
                     "XLY", "XLI", "XLP", "XLU", "XLB", "XLRE", "XLC"],
     },
+    # ── India (NSE) ──
+    "in_nifty": {
+        "market": "in",
+        "label": "Nifty large-caps",
+        "symbols": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+                    "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LT.NS",
+                    "KOTAKBANK.NS", "AXISBANK.NS", "BAJFINANCE.NS", "MARUTI.NS", "SUNPHARMA.NS"],
+    },
+    "in_bank": {
+        "market": "in",
+        "label": "India banks & financials",
+        "symbols": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "AXISBANK.NS",
+                    "INDUSINDBK.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "SBILIFE.NS", "HDFCLIFE.NS"],
+    },
+    "in_it": {
+        "market": "in",
+        "label": "India IT services",
+        "symbols": ["TCS.NS", "INFY.NS", "HCLTECH.NS", "WIPRO.NS", "TECHM.NS", "LTIM.NS"],
+    },
+    "in_auto": {
+        "market": "in",
+        "label": "India auto",
+        "symbols": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "EICHERMOT.NS",
+                    "HEROMOTOCO.NS", "BAJAJ-AUTO.NS"],
+    },
+    "in_pharma": {
+        "market": "in",
+        "label": "India pharma & healthcare",
+        "symbols": ["SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS", "APOLLOHOSP.NS"],
+    },
 }
 DEFAULT_UNIVERSE = "megacap"
 
@@ -222,12 +252,17 @@ def _rationale(sub: dict[str, float | None], tags: list[tuple[str, str]], overal
 
 
 async def _news_net_by_symbol(symbols: list[str]) -> dict[str, int]:
-    """One bulk Alpaca news call, scored per symbol with the shared heuristic."""
+    """News net-sentiment per symbol (Alpaca for US, yfinance for India)."""
     from app.api.market import _score_headline  # lazy: avoid circular import
+    from app.core.markets import Market, detect_market
     out: dict[str, int] = {}
     try:
-        broker = get_broker()
-        articles = await broker.get_news(symbols=symbols, limit=50)
+        if symbols and detect_market(symbols[0]) == Market.IN:
+            from app.services import india_market as india
+            articles = await india.get_news(symbols, limit=50)
+        else:
+            broker = get_broker()
+            articles = await broker.get_news(symbols=symbols, limit=50)
     except Exception as e:  # noqa: BLE001 — news is best-effort
         logger.warning("scan_news_failed", error=str(e))
         return out

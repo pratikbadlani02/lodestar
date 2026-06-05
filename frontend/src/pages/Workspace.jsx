@@ -8,7 +8,7 @@ import ChartWidget from '../components/ChartWidget'
 import { api } from '../lib/api'
 import { toast } from '../lib/toast'
 import { useSymbol } from '../lib/SymbolContext'
-import { fmt, fmtSigned, fmtSignedPct, fmtBig, signClass } from '../components/ui/format'
+import { fmt, fmtSigned, fmtSignedPct, fmtBig, signClass, fmtPrice, activeCurrency } from '../components/ui/format'
 import { Card, SectionHeader, Pill } from '../components/ui/primitives'
 
 const DEFAULT_WATCH = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'SPY', 'QQQ']
@@ -274,7 +274,7 @@ function OrderTicket() {
           <div className="flex items-baseline justify-between">
             <span className="font-mono font-semibold text-ink-1">{symbol}</span>
             <span className="font-mono tabular text-base text-ink-1">
-              {snap?.last != null ? `$${fmt(snap.last)}` : '—'}
+              {snap?.last != null ? fmtPrice(snap.last) : '—'}
             </span>
           </div>
           {snap?.change != null && (
@@ -285,8 +285,8 @@ function OrderTicket() {
             </div>
           )}
           <div className="flex justify-between text-2xs text-ink-4 font-mono pt-1">
-            <span>Bid {snap?.bid != null ? `$${fmt(snap.bid)}` : '—'}</span>
-            <span>Ask {snap?.ask != null ? `$${fmt(snap.ask)}` : '—'}</span>
+            <span>Bid {snap?.bid != null ? fmtPrice(snap.bid) : '—'}</span>
+            <span>Ask {snap?.ask != null ? fmtPrice(snap.ask) : '—'}</span>
           </div>
         </div>
 
@@ -403,7 +403,7 @@ function OrderTicket() {
 
         <div className="bg-surf-2/60 border border-surf-3 rounded px-2 py-1.5 text-2xs font-mono tabular text-ink-2 flex justify-between">
           <span>Est. notional</span>
-          <span>${fmt(estCost)}</span>
+          <span>{fmtPrice(estCost)}</span>
         </div>
 
         {err && <div className="bg-down/15 border border-down/30 text-down text-2xs rounded px-2 py-1">{err}</div>}
@@ -427,20 +427,20 @@ function OrderTicket() {
               <span>Position</span><span className="text-ink-2">{position.qty} sh</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-ink-3">Avg cost</span><span className="text-ink-2">${fmt(position.avg_entry_price)}</span>
+              <span className="text-ink-3">Avg cost</span><span className="text-ink-2">{fmtPrice(position.avg_entry_price)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-ink-3">P&L</span>
-              <span className={signClass(position.unrealized_pl)}>${fmt(position.unrealized_pl)}</span>
+              <span className={signClass(position.unrealized_pl)}>{fmtPrice(position.unrealized_pl)}</span>
             </div>
           </div>
         )}
 
         {account && (
           <div className="border-t border-surf-3 pt-2 mt-1 space-y-1 text-2xs font-mono tabular text-ink-3">
-            <div className="flex justify-between"><span>Buying power</span><span className="text-ink-2">${fmtBig(account.buying_power)}</span></div>
-            <div className="flex justify-between"><span>Cash</span><span>${fmtBig(account.cash)}</span></div>
-            <div className="flex justify-between"><span>Equity</span><span>${fmtBig(account.equity)}</span></div>
+            <div className="flex justify-between"><span>Buying power</span><span className="text-ink-2">{activeCurrency()}{fmtBig(account.buying_power)}</span></div>
+            <div className="flex justify-between"><span>Cash</span><span>{activeCurrency()}{fmtBig(account.cash)}</span></div>
+            <div className="flex justify-between"><span>Equity</span><span>{activeCurrency()}{fmtBig(account.equity)}</span></div>
           </div>
         )}
       </div>
@@ -488,7 +488,7 @@ function CenterColumn() {
       <div className="px-5 py-3 border-b border-white/[0.06] flex items-baseline gap-4 flex-wrap">
         <span className="font-display font-bold text-lg text-ink-1">{symbol}</span>
         <span className="text-2xl font-mono tabular font-bold text-ink-1">
-          {snap?.last != null ? `$${fmt(snap.last)}` : '—'}
+          {snap?.last != null ? fmtPrice(snap.last) : '—'}
         </span>
         {snap?.change != null && (
           <span className={`inline-flex items-baseline gap-1 font-mono tabular text-sm font-semibold ${up ? 'text-up' : 'text-down'}`}>

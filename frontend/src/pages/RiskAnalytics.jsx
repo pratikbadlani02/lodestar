@@ -5,6 +5,7 @@ import {
   PageShell, PageHeader, Card, SectionHeader, Select, Stat, StatGrid, Alert, SkeletonRows,
 } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
+import { activeCurrency } from '../components/ui/format'
 
 export default function RiskAnalytics() {
   const [risk, setRisk] = useState(null)
@@ -53,7 +54,7 @@ export default function RiskAnalytics() {
           <StatGrid cols={3}>
             <Stat
               label="Value at Risk (95%)"
-              value={`$${risk.var_95_dollars.toLocaleString()}`}
+              value={`${activeCurrency()}${risk.var_95_dollars.toLocaleString()}`}
               sub={`${risk.var_95_pct.toFixed(2)}% of equity`}
               variant="accent"
               big

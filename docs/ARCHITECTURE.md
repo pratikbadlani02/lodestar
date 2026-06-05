@@ -481,16 +481,36 @@ symbols unchanged because the data layer routes by suffix.
 risk gate (kill switch, rate limit, **NSE** hours, sim account/buying-power) →
 `SimBroker.submit_order` fills at the latest yfinance close → `FILLED` + audit.
 
-**Frontend.** A `MarketProvider` + US/India toggle in the TopBar scopes the
-symbol search universe, the currency symbol, and which account
-(`/account?market=`) the dashboard pulls. Switching market emits a
+**India data feeds (`app/services/india_market.py`).** Alpaca's snapshot,
+screener, movers and news feeds are US-only, so the Indian equivalents are
+computed from yfinance and Redis-cached, returning the **same shapes** the
+frontend already consumes:
+- **snapshots** — batch daily quotes (`yf.download`) → Alpaca snapshot shape.
+  The `/market/snapshots` and watchlist-quote endpoints route **per-symbol by
+  suffix** and merge, so a cross-market watchlist resolves each ticker correctly.
+- **movers / most-actives / screener** — ranked from the `NSE_UNIVERSE`
+  (`app/core/markets.py`) day-quotes.
+- **news / news-sentiment** — yfinance per-ticker news, scored with the shared
+  headline lexicon; the sentiment scanner gains Indian universes (`in_nifty`,
+  `in_bank`, `in_it`, `in_auto`, `in_pharma`).
+
+**Frontend market scoping.** A `MarketProvider` + US/India toggle in the TopBar
+scopes the whole app: the symbol search universe, the currency symbol, which
+account (`/account?market=`) the dashboard pulls, and the universe pages
+(Market, Movers, Heatmap, Screener, Sentiment Scanner, Earnings) which carry
+per-market symbol/sector/index lists and refetch on switch. The price formatter
+(`format.js`) holds an **active currency** that the selector keeps in sync, so
+`fmtPrice`/`fmtMoney` render ₹ or $ everywhere without per-call wiring;
+per-symbol pages derive currency from the symbol's suffix. Feed API calls
+default their `market` from the persisted selection. Switching market emits a
 `market:change` event the store listens to, re-pulling account/positions.
 
 **Limits / follow-ups.** No live Indian broker (simulated only, by design);
-Alpaca-only widgets (news, movers, most-actives) remain US; per-page currency
-symbols on some deep views still show `$` (the account `currency` field is
-available to migrate them); yfinance is subject to Yahoo rate-limits from
-datacenter IPs (same self-healing cache caveat as fundamentals).
+the Crypto page is global USD by design; yfinance options coverage for NSE
+names is sparse (Options page may be empty for India); Indian index sparklines
+on the market overview are skipped (those indices aren't on the OHLCV cache);
+yfinance is subject to Yahoo rate-limits from datacenter IPs (same self-healing
+cache caveat as fundamentals).
 
 ---
 

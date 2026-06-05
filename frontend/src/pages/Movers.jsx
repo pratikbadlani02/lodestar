@@ -5,6 +5,8 @@ import { api } from '../lib/api'
 import { Card, SectionHeader } from '../components/ui/primitives'
 import { PnlCell, MagBar } from '../components/ui/charts'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
+import { useMarket } from '../lib/MarketContext'
+import { fmtPrice } from '../components/ui/format'
 
 const fmt = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : Number(v).toFixed(d))
 const fmtBig = (v) => {
@@ -34,7 +36,7 @@ function MoverRow({ m, max, side, onClick, onContextMenu }) {
       style={{ backgroundImage: bg }}
     >
       <td className="font-mono font-semibold text-ink-1">{m.symbol}</td>
-      <td className="text-right font-mono tabular text-ink-2">${fmt(m.price)}</td>
+      <td className="text-right font-mono tabular text-ink-2">{fmtPrice(m.price)}</td>
       <td className="text-right">
         <PnlCell value={pct} scale={Math.max(5, max * 0.8)} />
       </td>
@@ -91,6 +93,7 @@ export default function Movers() {
   const [error, setError] = useState('')
   const [updatedAt, setUpdatedAt] = useState(null)
   const activeCtx = useSymbolContextMenu()
+  const { market } = useMarket()
 
   async function load() {
     setLoading(true); setError('')
@@ -110,7 +113,7 @@ export default function Movers() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [market])
 
   function openSymbol(sym) {
     navigate(`/analysis/${sym}`)

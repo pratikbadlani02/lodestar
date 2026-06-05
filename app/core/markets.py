@@ -110,3 +110,35 @@ def currency_for(symbol: str) -> str:
 def list_markets() -> list[dict]:
     """Public list of markets for the API / frontend selector."""
     return [dict(_META[m]) for m in Market]
+
+
+# ── NSE universe (for India movers / most-actives / screener) ─────────────────
+# Mirrors the frontend symbol directory. Used to compute market-wide rankings
+# from yfinance daily quotes (Alpaca's screener has no Indian coverage).
+NSE_UNIVERSE: list[str] = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+    "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS",
+    "LT.NS", "AXISBANK.NS", "BAJFINANCE.NS", "ASIANPAINT.NS", "MARUTI.NS",
+    "HCLTECH.NS", "SUNPHARMA.NS", "TITAN.NS", "ULTRACEMCO.NS", "WIPRO.NS",
+    "NESTLEIND.NS", "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "TATAMOTORS.NS",
+    "TATASTEEL.NS", "ADANIENT.NS", "ADANIPORTS.NS", "JSWSTEEL.NS", "COALINDIA.NS",
+    "BAJAJFINSV.NS", "M&M.NS", "TECHM.NS", "GRASIM.NS", "HINDALCO.NS",
+    "DRREDDY.NS", "CIPLA.NS", "BRITANNIA.NS", "EICHERMOT.NS", "BPCL.NS",
+    "DIVISLAB.NS", "HEROMOTOCO.NS", "INDUSINDBK.NS", "APOLLOHOSP.NS",
+    "TATACONSUM.NS", "BAJAJ-AUTO.NS", "SBILIFE.NS", "HDFCLIFE.NS", "LTIM.NS",
+    "DMART.NS",
+]
+
+# Indian market indices (yfinance symbols) for the market-overview strip.
+INDIA_INDICES: list[dict] = [
+    {"symbol": "^NSEI", "label": "NIFTY 50"},
+    {"symbol": "^BSESN", "label": "SENSEX"},
+    {"symbol": "^NSEBANK", "label": "BANK NIFTY"},
+    {"symbol": "^INDIAVIX", "label": "India VIX"},
+]
+
+
+def universe_for(market: "Market | str") -> list[str]:
+    """The screenable symbol universe for a market."""
+    return NSE_UNIVERSE if get_market(market) == Market.IN else []
+

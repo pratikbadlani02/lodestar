@@ -6,10 +6,11 @@ import {
   PageShell, PageHeader, Card, IconButton, Select, Pill,
 } from '../components/ui/primitives'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
+import { useMarket } from '../lib/MarketContext'
 
 // Curated megacap-by-sector list. Edit freely — Heatmap renders whatever symbols
-// have a snapshot returned by /market/snapshots.
-const SECTOR_MAP = {
+// have a snapshot returned by /market/snapshots. One map per market.
+const SECTOR_MAP_US = {
   Technology:              ['AAPL', 'MSFT', 'NVDA', 'AVGO', 'ORCL', 'CRM', 'ADBE', 'AMD', 'INTC', 'CSCO', 'QCOM', 'TXN', 'IBM', 'NOW', 'INTU'],
   'Consumer Discretionary':['AMZN', 'TSLA', 'HD', 'MCD', 'NKE', 'LOW', 'SBUX', 'BKNG', 'TJX', 'CMG'],
   'Communication Services':['GOOGL', 'META', 'NFLX', 'DIS', 'CMCSA', 'TMUS', 'VZ', 'T', 'CHTR'],
@@ -21,6 +22,19 @@ const SECTOR_MAP = {
   Utilities:               ['NEE', 'SO', 'DUK', 'AEP', 'SRE'],
   'Real Estate':           ['PLD', 'AMT', 'EQIX', 'CCI', 'O'],
   Materials:               ['LIN', 'SHW', 'APD', 'FCX', 'NEM'],
+}
+
+// India (NSE) sector map — symbols carry the .NS suffix.
+const SECTOR_MAP_IN = {
+  'IT Services':       ['TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS'],
+  Financials:          ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 'INDUSINDBK.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS', 'SBILIFE.NS', 'HDFCLIFE.NS'],
+  Energy:              ['RELIANCE.NS', 'ONGC.NS', 'BPCL.NS', 'COALINDIA.NS', 'NTPC.NS', 'POWERGRID.NS'],
+  Auto:                ['MARUTI.NS', 'TATAMOTORS.NS', 'M&M.NS', 'EICHERMOT.NS', 'HEROMOTOCO.NS', 'BAJAJ-AUTO.NS'],
+  'FMCG / Consumer':   ['HINDUNILVR.NS', 'ITC.NS', 'NESTLEIND.NS', 'BRITANNIA.NS', 'TATACONSUM.NS', 'DMART.NS', 'TITAN.NS'],
+  Pharma:              ['SUNPHARMA.NS', 'DRREDDY.NS', 'CIPLA.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS'],
+  Materials:           ['ULTRACEMCO.NS', 'GRASIM.NS', 'ASIANPAINT.NS', 'TATASTEEL.NS', 'JSWSTEEL.NS', 'HINDALCO.NS'],
+  'Infra / Conglom.':  ['LT.NS', 'ADANIENT.NS', 'ADANIPORTS.NS'],
+  Telecom:             ['BHARTIARTL.NS'],
 }
 
 // Color intensity scale — real gradient driven by alpha. Hue from up/down
@@ -161,6 +175,8 @@ function BreadthBar({ items }) {
 export default function Heatmap() {
   const navigate = useNavigate()
   const ctx = useSymbolContextMenu()
+  const { market } = useMarket()
+  const SECTOR_MAP = market === 'in' ? SECTOR_MAP_IN : SECTOR_MAP_US
   const [snapshots, setSnapshots] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -177,7 +193,7 @@ export default function Heatmap() {
 
   const allSymbols = useMemo(
     () => Array.from(new Set(Object.values(SECTOR_MAP).flat())),
-    []
+    [SECTOR_MAP]
   )
 
   async function load() {
@@ -193,12 +209,13 @@ export default function Heatmap() {
     }
   }
 
-  // Initial load + auto-refresh every 30s
+  // Initial load + auto-refresh every 30s; reloads when the market switches
+  // (allSymbols changes with the active market's sector map).
   useEffect(() => {
     load()
     intervalRef.current = setInterval(load, REFRESH_MS)
     return () => clearInterval(intervalRef.current)
-  }, [])
+  }, [allSymbols])
 
   const allSymbolsLoaded = Object.keys(snapshots).length > 0
 

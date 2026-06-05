@@ -14,6 +14,8 @@ import {
 } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
 import Term from '../components/Term'
+import { useMarket } from '../lib/MarketContext'
+import { activeCurrency } from '../components/ui/format'
 
 // ── Constants ─────────────────────────────────────────────────────
 const PRESETS_KEY = 'quant_screener_presets_v1'
@@ -63,7 +65,7 @@ function fmtVol(v) {
 }
 function fmtPrice(n) {
   if (n == null) return '—'
-  return `$${Number(n).toFixed(2)}`
+  return `${activeCurrency()}${Number(n).toFixed(2)}`
 }
 function fmtAgo(ts) {
   if (!ts) return '—'
@@ -106,8 +108,8 @@ function downloadCSV(rows, name = 'screener-results.csv') {
 // Describe an active filter for the chip strip.
 function describeFilter(key, value) {
   switch (key) {
-    case 'minPrice':     return `Price ≥ $${value}`
-    case 'maxPrice':     return `Price ≤ $${value}`
+    case 'minPrice':     return `Price ≥ ${activeCurrency()}${value}`
+    case 'maxPrice':     return `Price ≤ ${activeCurrency()}${value}`
     case 'minVolume':    return `Vol ≥ ${fmtVol(Number(value))}`
     case 'minChangePct': return `Δ ≥ ${value}%`
     case 'maxChangePct': return `Δ ≤ ${value}%`
@@ -121,6 +123,7 @@ function describeFilter(key, value) {
 export default function Screener() {
   const navigate = useNavigate()
   const { setSymbol } = useSymbol()
+  const { market } = useMarket()
   const ctx = useSymbolContextMenu()
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
@@ -138,8 +141,8 @@ export default function Screener() {
   // Load watchlists once
   useEffect(() => { api.listWatchlists().then(setWatchlists).catch(() => {}) }, [])
 
-  // Auto-run on mount
-  useEffect(() => { runScreener() }, [])
+  // Auto-run on mount and whenever the market switches
+  useEffect(() => { runScreener() }, [market])
 
   const setFilter = (key) => (val) => setFilters((f) => ({ ...f, [key]: val }))
 

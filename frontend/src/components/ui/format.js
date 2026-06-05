@@ -1,17 +1,33 @@
 // Centralized number/date formatters used across pages.
 
-export function fmtPrice(v, d = 2) {
-  if (v == null || Number.isNaN(Number(v))) return '—'
-  return `$${Number(v).toFixed(d)}`
+// ── Active currency ───────────────────────────────────────────────
+// The market selector (MarketContext) sets the active currency symbol so that
+// every price rendered via fmtPrice/fmtMoney follows the selected market
+// (₹ for India, $ for US) without each call site needing market context.
+// Initialized from the persisted market so first paint is already correct.
+const _CCY = { us: '$', in: '₹' }
+let _activeCcy = (() => {
+  try { return _CCY[localStorage.getItem('quant_market_v1')] || '$' } catch { return '$' }
+})()
+
+export function setActiveCurrency(sym) {
+  if (sym) _activeCcy = sym
+}
+export function activeCurrency() {
+  return _activeCcy
 }
 
-// Currency-aware money formatter. `cur` is a currency symbol ('$', '₹', …) and
-// defaults to USD so existing callers are unaffected. Use with the active
-// market's symbol (see MarketContext) or currencySymbolOf(symbol).
-export function fmtMoney(v, cur = '$', d = 2) {
+export function fmtPrice(v, d = 2) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  return `${_activeCcy}${Number(v).toFixed(d)}`
+}
+
+// Currency-aware money formatter. `cur` defaults to the active market currency
+// symbol; pass an explicit symbol (e.g. currencySymbolOf(sym)) to override.
+export function fmtMoney(v, cur = null, d = 2) {
   if (v == null || Number.isNaN(Number(v))) return '—'
   const n = Number(v)
-  return `${cur}${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`
+  return `${cur || _activeCcy}${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`
 }
 
 export function fmtNum(v, d = 2) {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Radar, RefreshCw, Loader2, TrendingUp, Newspaper, CalendarClock, Target, UserCheck } from 'lucide-react'
 import { api } from '../lib/api'
 import { useSymbol } from '../lib/SymbolContext'
+import { useMarket } from '../lib/MarketContext'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
 import { PageShell, PageHeader, Card, SectionHeader, Pill, Select, Button, IconButton, Alert } from '../components/ui/primitives'
 import { PnlCell, HeatRing } from '../components/ui/charts'
@@ -35,8 +36,9 @@ const scoreBg = (v) => (v == null ? 'bg-white/10' : v >= 66 ? 'bg-up' : v >= 45 
 export default function SentimentScanner() {
   const navigate = useNavigate()
   const { setSymbol } = useSymbol()
+  const { market } = useMarket()
   const ctx = useSymbolContextMenu()
-  const [sel, setSel] = useState('megacap')          // preset key or `wl:<id>`
+  const [sel, setSel] = useState(market === 'in' ? 'in_nifty' : 'megacap')  // preset key or `wl:<id>`
   const [presets, setPresets] = useState(FALLBACK_PRESETS)
   const [watchlists, setWatchlists] = useState([])
   const [data, setData] = useState(null)
@@ -48,11 +50,17 @@ export default function SentimentScanner() {
   // Populate the selector: curated universes from the backend + (if logged in)
   // the user's watchlists, which scan via the symbols= param.
   useEffect(() => {
-    api.getSentimentUniverses().then((d) => { if (d?.universes?.length) setPresets(d.universes) }).catch(() => {})
+    api.getSentimentUniverses(market).then((d) => {
+      const list = d?.universes?.length ? d.universes : FALLBACK_PRESETS
+      setPresets(list)
+      // Keep selection valid for the active market; otherwise pick its first universe.
+      setSel((cur) => (cur.startsWith('wl:') || list.some((u) => u.key === cur))
+        ? cur : (list[0]?.key || (market === 'in' ? 'in_nifty' : 'megacap')))
+    }).catch(() => setPresets(FALLBACK_PRESETS))
     let hasToken = false
     try { hasToken = !!sessionStorage.getItem('quant_token') } catch { /* ignore */ }
     if (hasToken) api.listWatchlists().then((ws) => setWatchlists(Array.isArray(ws) ? ws : [])).catch(() => {})
-  }, [])
+  }, [market])
 
   const fetchScan = useCallback(async (selection, refresh = false) => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }

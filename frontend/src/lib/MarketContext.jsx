@@ -7,6 +7,7 @@
 // preference, persisted in localStorage.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { setActiveCurrency } from '../components/ui/format'
 
 const MARKET_KEY = 'quant_market_v1'
 
@@ -38,9 +39,13 @@ const MarketContext = createContext({
 export function MarketProvider({ children }) {
   const [market, setMarketState] = useState(loadMarket)
 
+  // Keep the global price-formatter currency in sync with the active market.
+  useEffect(() => { setActiveCurrency(MARKETS[market].symbol) }, [market])
+
   const setMarket = useCallback((code) => {
     if (!MARKETS[code]) return
     setMarketState(code)
+    setActiveCurrency(MARKETS[code].symbol)
     try { localStorage.setItem(MARKET_KEY, code) } catch {}
     // Let the store re-pull the market-scoped account/positions.
     try { window.dispatchEvent(new CustomEvent('market:change', { detail: code })) } catch {}

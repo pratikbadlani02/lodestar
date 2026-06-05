@@ -10,6 +10,7 @@ import SymbolHeader from '../components/SymbolHeader'
 import { Card } from '../components/ui/primitives'
 import { PnlCell, MiniEquityCurve } from '../components/ui/charts'
 import EmptyState from '../components/ui/EmptyState'
+import { activeCurrency } from '../components/ui/format'
 
 const fmt = (v, d = 2) => (v == null || Number.isNaN(Number(v)) ? '—' : Number(v).toFixed(d))
 const fmtPct = (v, d = 2) =>
@@ -114,7 +115,7 @@ export default function Dividends({ embedded = false }) {
             sub={yieldVsAvg != null
               ? `${yieldVsAvg >= 0 ? '+' : ''}${yieldVsAvg.toFixed(2)}pp vs 5y avg`
               : null} />
-          <StatTile label="Annual Rate" value={`$${fmt(data.dividend_rate)}`} />
+          <StatTile label="Annual Rate" value={`${activeCurrency()}${fmt(data.dividend_rate)}`} />
           <StatTile
             label="Payout Ratio"
             value={fmtPct(data.payout_ratio)}
@@ -128,7 +129,7 @@ export default function Dividends({ embedded = false }) {
             tone={growth5y != null ? (growth5y > 5 ? 'text-up' : growth5y < 0 ? 'text-down' : 'text-ink-1') : 'text-ink-4'} />
           <StatTile label="Last Paid"
             value={fmtDate(data.last_dividend_date)}
-            sub={data.last_dividend_value ? `$${fmt(data.last_dividend_value, 4)}/sh` : null} />
+            sub={data.last_dividend_value ? `${activeCurrency()}${fmt(data.last_dividend_value, 4)}/sh` : null} />
         </div>
       )}
 
@@ -151,7 +152,7 @@ export default function Dividends({ embedded = false }) {
                 }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(var(--c-border-rgb) / 0.15)" />
                   <XAxis dataKey="date" stroke="rgb(var(--c-ink-4))" fontSize={10} />
-                  <YAxis stroke="rgb(var(--c-ink-4))" fontSize={10} tickFormatter={(v) => `$${v.toFixed(2)}`} />
+                  <YAxis stroke="rgb(var(--c-ink-4))" fontSize={10} tickFormatter={(v) => `${activeCurrency()}${v.toFixed(2)}`} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'rgb(var(--c-surf-1))',
@@ -159,7 +160,7 @@ export default function Dividends({ embedded = false }) {
                       borderRadius: 8, fontSize: 12,
                       color: 'rgb(var(--c-ink-1))',
                     }}
-                    formatter={(v) => `$${Number(v).toFixed(4)}`}
+                    formatter={(v) => `${activeCurrency()}${Number(v).toFixed(4)}`}
                   />
                   <Bar dataKey="amount" fill="rgb(var(--c-up))" radius={[3, 3, 0, 0]} />
                 </BarChart>

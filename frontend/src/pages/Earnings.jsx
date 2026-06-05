@@ -5,8 +5,10 @@ import { api } from '../lib/api'
 import { Card } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
 import { useSymbolContextMenu } from '../components/ui/ContextMenu'
+import { useMarket } from '../lib/MarketContext'
 import Term from '../components/Term'
 const DEFAULT_SYMBOLS = 'AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,NFLX,AMD,AVGO,JPM,XOM,WMT,UNH,V'
+const DEFAULT_SYMBOLS_IN = 'RELIANCE.NS,TCS.NS,HDFCBANK.NS,INFY.NS,ICICIBANK.NS,SBIN.NS,BHARTIARTL.NS,ITC.NS,LT.NS,MARUTI.NS'
 
 // One-click universe presets so you don't have to type tickers. Sector groups
 // are kept modest because the backend fetches each symbol's calendar
@@ -22,7 +24,7 @@ const GROUPS = {
 }
 const ALL_MAJORS = Array.from(new Set(Object.values(GROUPS).join(',').split(','))).join(',')
 
-const PRESETS = [
+const PRESETS_US = [
   ['mega',     'Megacap',    GROUPS.mega],
   ['tech',     'Tech',       GROUPS.tech],
   ['fin',      'Financials', GROUPS.fin],
@@ -30,6 +32,26 @@ const PRESETS = [
   ['consumer', 'Consumer',   GROUPS.consumer],
   ['energy',   'Energy',     GROUPS.energy],
   ['all',      'All majors', ALL_MAJORS],
+]
+
+// India (NSE) earnings universes.
+const GROUPS_IN = {
+  nifty:  DEFAULT_SYMBOLS_IN,
+  it:     'TCS.NS,INFY.NS,HCLTECH.NS,WIPRO.NS,TECHM.NS,LTIM.NS',
+  banks:  'HDFCBANK.NS,ICICIBANK.NS,SBIN.NS,KOTAKBANK.NS,AXISBANK.NS,INDUSINDBK.NS,BAJFINANCE.NS',
+  auto:   'MARUTI.NS,TATAMOTORS.NS,M&M.NS,EICHERMOT.NS,HEROMOTOCO.NS,BAJAJ-AUTO.NS',
+  pharma: 'SUNPHARMA.NS,DRREDDY.NS,CIPLA.NS,DIVISLAB.NS,APOLLOHOSP.NS',
+  fmcg:   'HINDUNILVR.NS,ITC.NS,NESTLEIND.NS,BRITANNIA.NS,TATACONSUM.NS,DMART.NS',
+}
+const ALL_MAJORS_IN = Array.from(new Set(Object.values(GROUPS_IN).join(',').split(','))).join(',')
+const PRESETS_IN = [
+  ['nifty',  'Nifty',    GROUPS_IN.nifty],
+  ['it',     'IT',       GROUPS_IN.it],
+  ['banks',  'Banks',    GROUPS_IN.banks],
+  ['auto',   'Auto',     GROUPS_IN.auto],
+  ['pharma', 'Pharma',   GROUPS_IN.pharma],
+  ['fmcg',   'FMCG',     GROUPS_IN.fmcg],
+  ['all',    'All NSE',  ALL_MAJORS_IN],
 ]
 
 const fmtDate = (s) => {
@@ -92,8 +114,11 @@ const FILTERS = [
 
 export default function Earnings() {
   const navigate = useNavigate()
-  const [symbolsInput, setSymbolsInput] = useState(DEFAULT_SYMBOLS)
-  const [symbols, setSymbols] = useState(DEFAULT_SYMBOLS)
+  const { market } = useMarket()
+  const PRESETS = market === 'in' ? PRESETS_IN : PRESETS_US
+  const marketDefault = market === 'in' ? DEFAULT_SYMBOLS_IN : DEFAULT_SYMBOLS
+  const [symbolsInput, setSymbolsInput] = useState(marketDefault)
+  const [symbols, setSymbols] = useState(marketDefault)
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -105,6 +130,14 @@ export default function Earnings() {
   useEffect(() => {
     api.listWatchlists().then(setWatchlists).catch(() => setWatchlists([]))
   }, [])
+
+  // Reset the calendar universe to the market's default when the market switches.
+  useEffect(() => {
+    setSymbolsInput(marketDefault)
+    setSymbols(marketDefault)
+    setSelected('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market])
 
   useEffect(() => {
     let cancelled = false

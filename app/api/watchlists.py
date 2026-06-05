@@ -104,11 +104,20 @@ async def get_watchlist_quotes(
     if not wl.symbols:
         return {"watchlist_id": str(watchlist_id), "quotes": {}}
 
-    broker = get_broker()
-    try:
-        snapshots = await broker.get_snapshots(wl.symbols)
-    except AlpacaError as e:
-        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    # Route per-symbol by exchange suffix: Alpaca for US, yfinance for India.
+    from app.core.markets import Market, detect_market
+    from app.services import india_market as india
+    syms = [s.upper() for s in wl.symbols]
+    in_syms = [s for s in syms if detect_market(s) == Market.IN]
+    us_syms = [s for s in syms if detect_market(s) == Market.US]
+    snapshots: dict = {}
+    if in_syms:
+        snapshots.update(await india.get_snapshots(in_syms))
+    if us_syms:
+        try:
+            snapshots.update(await get_broker().get_snapshots(us_syms))
+        except AlpacaError as e:
+            raise HTTPException(status_code=502, detail=f"Broker error: {e}")
 
     quotes = {}
     for sym, snap in snapshots.items():

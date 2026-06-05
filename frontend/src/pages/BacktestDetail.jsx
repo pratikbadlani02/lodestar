@@ -8,6 +8,7 @@ import {
   PageShell, PageHeader, Card, SectionHeader, Button,
   Stat, StatGrid, Alert, StatusBadge, SkeletonRows,
 } from '../components/ui/primitives'
+import { currencySymbolOf } from '../lib/MarketContext'
 
 export default function BacktestDetail() {
   const { id } = useParams()
@@ -48,7 +49,9 @@ export default function BacktestDetail() {
       plPerFill: fills ? totalPL / fills : 0,
     }
   }, [bt, isMM])
-  const money = (v) => `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  // Currency follows the backtested instrument (Indian symbols carry .NS/.BO).
+  const ccy = currencySymbolOf(bt?.symbols?.[0])
+  const money = (v) => `${v < 0 ? '-' : ''}${ccy}${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 
   return (
     <PageShell>
@@ -69,7 +72,7 @@ export default function BacktestDetail() {
       ) : (
         <div className="space-y-3">
           <StatGrid cols={5}>
-            <Stat label="Final Equity" value={bt.final_equity ? `$${Number(bt.final_equity).toLocaleString()}` : '—'} big />
+            <Stat label="Final Equity" value={bt.final_equity ? `${ccy}${Number(bt.final_equity).toLocaleString()}` : '—'} big />
             <Stat
               label="Total Return"
               value={bt.total_return_pct !== null ? `${Number(bt.total_return_pct).toFixed(2)}%` : '—'}

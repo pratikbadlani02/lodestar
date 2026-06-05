@@ -5,18 +5,20 @@ import { useStore, selectPositions } from '../lib/store'
 import EmptyState from '../components/ui/EmptyState'
 import { Card, SectionHeader, PageShell, PageHeader } from '../components/ui/primitives'
 import { Donut, PnlCell, MagBar, MiniEquityCurve } from '../components/ui/charts'
+import { activeCurrency, fmtPrice } from '../components/ui/format'
 
 function fmtUsd(n) {
   if (n === null || n === undefined) return '—'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(n))
+  return `${activeCurrency()}${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 function fmtUsdCompact(n) {
   if (n === null || n === undefined) return '—'
   const v = Number(n)
   const abs = Math.abs(v)
-  if (abs >= 1e9) return `${v >= 0 ? '' : '-'}$${(abs / 1e9).toFixed(2)}B`
-  if (abs >= 1e6) return `${v >= 0 ? '' : '-'}$${(abs / 1e6).toFixed(2)}M`
-  if (abs >= 1e3) return `${v >= 0 ? '' : '-'}$${(abs / 1e3).toFixed(1)}K`
+  const c = activeCurrency()
+  if (abs >= 1e9) return `${v >= 0 ? '' : '-'}${c}${(abs / 1e9).toFixed(2)}B`
+  if (abs >= 1e6) return `${v >= 0 ? '' : '-'}${c}${(abs / 1e6).toFixed(2)}M`
+  if (abs >= 1e3) return `${v >= 0 ? '' : '-'}${c}${(abs / 1e3).toFixed(1)}K`
   return fmtUsd(v)
 }
 
@@ -180,8 +182,8 @@ export default function Positions() {
                         <td className="font-semibold text-ink-1">{p.symbol}</td>
                         <td className={p.side === 'long' ? 'text-up' : 'text-down'}>{p.side}</td>
                         <td className="text-right text-ink-2">{p.qty}</td>
-                        <td className="text-right text-ink-2">${Number(p.avg_entry_price).toFixed(2)}</td>
-                        <td className="text-right text-ink-2">${Number(p.current_price).toFixed(2)}</td>
+                        <td className="text-right text-ink-2">{fmtPrice(p.avg_entry_price)}</td>
+                        <td className="text-right text-ink-2">{fmtPrice(p.current_price)}</td>
                         <td className="text-right text-ink-1 font-semibold">{fmtUsdCompact(mv)}</td>
                         <td>
                           <MagBar value={mv} scale={maxValue} height={6} />

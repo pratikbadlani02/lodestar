@@ -9,6 +9,7 @@ import { api } from '../lib/api'
 import { useSymbolPage } from '../lib/SymbolContext'
 import SymbolHeader from '../components/SymbolHeader'
 import { Card, Section } from '../components/ui/primitives'
+import { activeCurrency } from '../components/ui/format'
 
 const fmt = (v, d = 2) =>
   v == null || Number.isNaN(v) ? '—' : Number(v).toFixed(d)
@@ -175,8 +176,8 @@ export default function Options({ embedded = false }) {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Chip label="Underlying" value={underlying != null ? `$${fmt(underlying)}` : '—'} />
-          <Chip label="Max Pain" value={maxPain != null ? `$${fmt(maxPain)}` : '—'}
+          <Chip label="Underlying" value={underlying != null ? `${activeCurrency()}${fmt(underlying)}` : '—'} />
+          <Chip label="Max Pain" value={maxPain != null ? `${activeCurrency()}${fmt(maxPain)}` : '—'}
             tone={maxPain != null && underlying != null
               ? (maxPain > underlying ? 'text-up' : 'text-down')
               : ''} />
@@ -229,7 +230,7 @@ export default function Options({ embedded = false }) {
                       color: 'rgb(var(--c-ink-1))',
                     }}
                     formatter={(v, name) => [Math.abs(Number(v)).toLocaleString(), name === 'callOI' ? 'Call OI' : 'Put OI']}
-                    labelFormatter={(v) => `Strike $${v}`}
+                    labelFormatter={(v) => `Strike ${activeCurrency()}${v}`}
                   />
                   {underlying != null && (
                     <ReferenceLine x={underlying} stroke="rgb(var(--c-accent))" strokeDasharray="4 4"
@@ -269,7 +270,7 @@ export default function Options({ embedded = false }) {
                         color: 'rgb(var(--c-ink-1))',
                       }}
                       formatter={(v) => `${Number(v).toFixed(1)}%`}
-                      labelFormatter={(v) => `Strike $${v}`}
+                      labelFormatter={(v) => `Strike ${activeCurrency()}${v}`}
                     />
                     {underlying != null && (
                       <ReferenceLine x={underlying} stroke="rgb(var(--c-accent))" strokeDasharray="4 4" />

@@ -7,9 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.core.markets import list_markets
+from app.core.markets import Market, detect_market, get_market, list_markets
 from app.core.models import OHLCV
 from app.services import fundamentals as fund
+from app.services import india_market as india
 from app.services import stock_analysis as analysis
 from app.services.broker import AlpacaError, get_broker
 from app.services.market_data import fetch_and_store_bars, get_bars_df
@@ -74,14 +75,31 @@ async def trigger_fetch(
 async def get_news(
     symbols: str | None = Query(default=None, description="Comma-separated symbols, e.g. AAPL,TSLA"),
     limit: int = Query(default=20, ge=1, le=50),
+    market: str = Query(default="us", description="us | in"),
 ) -> dict:
-    """Fetch latest news articles from Alpaca (Webull-style news feed)."""
+    """Latest news — Alpaca for US, yfinance for India (Webull-style feed).
+    With explicit symbols, routes per-symbol by suffix; the general feed (no
+    symbols) follows the ``market`` selector."""
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else None
-    broker = get_broker()
-    try:
-        articles = await broker.get_news(symbols=sym_list, limit=limit)
-    except AlpacaError as e:
-        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    if sym_list:
+        in_syms = [s for s in sym_list if detect_market(s) == Market.IN]
+        us_syms = [s for s in sym_list if detect_market(s) == Market.US]
+        articles = []
+        if in_syms:
+            articles += await india.get_news(in_syms, limit=limit)
+        if us_syms:
+            try:
+                articles += await get_broker().get_news(symbols=us_syms, limit=limit)
+            except AlpacaError as e:
+                raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    elif get_market(market) == Market.IN:
+        articles = await india.get_news(None, limit=limit)
+    else:
+        broker = get_broker()
+        try:
+            articles = await broker.get_news(symbols=None, limit=limit)
+        except AlpacaError as e:
+            raise HTTPException(status_code=502, detail=f"Broker error: {e}")
     return {
         "count": len(articles),
         "articles": [
@@ -107,12 +125,18 @@ async def screener(
     max_price: float = Query(default=1_000_000, ge=0),
     min_change_pct: float = Query(default=-100, description="Min % change from open"),
     max_change_pct: float = Query(default=100),
+    market: str = Query(default="us", description="us | in"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
-    Screen stocks using most-recent OHLCV bars stored locally.
-    Returns symbols matching volume and price-change filters.
+    Screen stocks by volume and price-change filters. US uses locally-cached
+    OHLCV bars; India screens the NSE universe from live yfinance quotes.
     """
+    if get_market(market) == Market.IN:
+        return await india.screen(
+            min_volume=min_volume, min_price=min_price, max_price=max_price,
+            min_change_pct=min_change_pct, max_change_pct=max_change_pct,
+        )
     cutoff = datetime.now(timezone.utc) - timedelta(days=3)
     result = await db.execute(
         select(OHLCV)
@@ -160,15 +184,23 @@ async def screener(
 async def get_snapshots(
     symbols: str = Query(..., description="Comma-separated symbols, e.g. AAPL,TSLA"),
 ) -> dict:
-    """Fetch real-time quote snapshots for given symbols."""
+    """Quote snapshots, routed per-symbol by exchange suffix: Alpaca for US
+    tickers, yfinance for Indian (.NS/.BO) tickers. A mixed batch (e.g. a
+    cross-market watchlist) is split and merged so each symbol gets the right
+    source regardless of the active market selector."""
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     if not sym_list:
         raise HTTPException(status_code=400, detail="No symbols provided")
-    broker = get_broker()
-    try:
-        data = await broker.get_snapshots(sym_list)
-    except AlpacaError as e:
-        raise HTTPException(status_code=502, detail=f"Broker error: {e}")
+    in_syms = [s for s in sym_list if detect_market(s) == Market.IN]
+    us_syms = [s for s in sym_list if detect_market(s) == Market.US]
+    data: dict = {}
+    if in_syms:
+        data.update(await india.get_snapshots(in_syms))
+    if us_syms:
+        try:
+            data.update(await get_broker().get_snapshots(us_syms))
+        except AlpacaError as e:
+            raise HTTPException(status_code=502, detail=f"Broker error: {e}")
     return {"snapshots": data}
 
 
@@ -288,7 +320,10 @@ async def get_quotes(
 @router.get("/movers")
 async def get_movers(
     top: int = Query(default=25, ge=1, le=100),
+    market: str = Query(default="us", description="us | in"),
 ) -> dict:
+    if get_market(market) == Market.IN:
+        return await india.get_movers(top=top)
     broker = get_broker()
     try:
         return await broker.get_movers(top=top)
@@ -300,7 +335,10 @@ async def get_movers(
 async def get_most_actives(
     top: int = Query(default=25, ge=1, le=100),
     by: str = Query(default="volume", pattern="^(volume|trades)$"),
+    market: str = Query(default="us", description="us | in"),
 ) -> dict:
+    if get_market(market) == Market.IN:
+        return await india.get_most_actives(top=top, by=by)
     broker = get_broker()
     try:
         return await broker.get_most_actives(top=top, by=by)
@@ -382,12 +420,18 @@ async def get_analysis(
         payload["short_interest"] = None
     if include_news:
         try:
-            broker = get_broker()
-            articles = await broker.get_news(symbols=[symbol.upper()], limit=10)
-            payload["news"] = articles
+            payload["news"] = await _news_for_symbol(symbol, limit=10)
         except Exception:
             payload["news"] = []
     return payload
+
+
+async def _news_for_symbol(symbol: str, limit: int) -> list[dict]:
+    """Market-aware single-symbol news (Alpaca US / yfinance IN)."""
+    if detect_market(symbol) == Market.IN:
+        return await india.get_news([symbol.upper()], limit=limit)
+    broker = get_broker()
+    return await broker.get_news(symbols=[symbol.upper()], limit=limit)
 
 
 @router.get("/earnings-surprise/{symbol}")
@@ -401,13 +445,17 @@ async def get_short_interest(symbol: str) -> dict:
 
 
 @router.get("/sentiment-scan/universes")
-async def sentiment_scan_universes() -> dict:
-    """List the curated universes the scanner can run."""
+async def sentiment_scan_universes(
+    market: str = Query(default="us", description="us | in"),
+) -> dict:
+    """List the curated universes the scanner can run, scoped to the market."""
     from app.services import sentiment_scanner as scanner
+    mkt = get_market(market).value
     return {
         "universes": [
             {"key": k, "label": v["label"], "count": len(v["symbols"])}
             for k, v in scanner.UNIVERSES.items()
+            if v.get("market", "us") == mkt
         ]
     }
 
@@ -439,9 +487,8 @@ async def get_news_sentiment(
     symbol: str,
     limit: int = Query(default=30, ge=1, le=50),
 ) -> dict:
-    broker = get_broker()
     try:
-        articles = await broker.get_news(symbols=[symbol.upper()], limit=limit)
+        articles = await _news_for_symbol(symbol, limit=limit)
     except AlpacaError as e:
         raise HTTPException(status_code=502, detail=f"Broker error: {e}")
     pos = neg = neu = 0

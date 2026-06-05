@@ -8,6 +8,7 @@ import {
   Input, Select, Checkbox, FormField, Alert, StatusBadge, SkeletonRows,
 } from '../components/ui/primitives'
 import EmptyState from '../components/ui/EmptyState'
+import { fmtPrice } from '../components/ui/format'
 
 export default function Orders() {
   // Orders come from the global store; WS pushes updates on order_update events
@@ -74,7 +75,7 @@ export default function Orders() {
                     <td className="text-right font-mono tabular">{o.qty}</td>
                     <td className="text-right font-mono tabular">{o.filled_qty}</td>
                     <td className="text-right font-mono tabular">
-                      {o.avg_fill_price ? `$${Number(o.avg_fill_price).toFixed(2)}` : <span className="text-ink-5">—</span>}
+                      {o.avg_fill_price ? fmtPrice(o.avg_fill_price) : <span className="text-ink-5">—</span>}
                     </td>
                     <td><StatusBadge status={o.status} /></td>
                     <td className="text-ink-4 text-xs truncate max-w-xs" title={o.reason}>{o.reason || '—'}</td>

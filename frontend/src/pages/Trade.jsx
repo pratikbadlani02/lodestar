@@ -5,17 +5,18 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api'
 import ChartWidget from '../components/ChartWidget'
+import { activeCurrency } from '../components/ui/format'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtPrice(n, dash = '—') {
   if (n === null || n === undefined) return dash
-  return `$${Number(n).toFixed(2)}`
+  return `${activeCurrency()}${Number(n).toFixed(2)}`
 }
 
 function fmtDollar(n) {
   if (n === null || n === undefined) return '—'
-  return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `${activeCurrency()}${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function fmtVol(n) {
@@ -255,7 +256,7 @@ export default function Trade({ isPaper = false }) {
                   )}
                 </div>
                 <span className="font-mono text-sm font-semibold text-ink-2 ml-2 shrink-0">
-                  {q.price != null ? `$${Number(q.price).toFixed(2)}` : '—'}
+                  {q.price != null ? fmtPrice(q.price) : '—'}
                 </span>
               </div>
             )

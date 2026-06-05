@@ -4,6 +4,14 @@ const BASE = '/api'
 function getToken() { return sessionStorage.getItem('quant_token') }
 export function setToken(t) { t ? sessionStorage.setItem('quant_token', t) : sessionStorage.removeItem('quant_token') }
 
+// Active market ('us'|'in') for scoping US-only feeds (movers, snapshots, news,
+// screener, sentiment). Read from the same storage MarketContext writes to, so
+// callers that don't pass an explicit market still get the selected one.
+function mkt(m) {
+  if (m) return m
+  try { return localStorage.getItem('quant_market_v1') || 'us' } catch { return 'us' }
+}
+
 async function request(method, path, body) {
   const headers = {}
   const token = getToken()
@@ -104,15 +112,16 @@ export const api = {
   deleteWatchlist: (id) => request('DELETE', `/watchlists/${id}`),
   getWatchlistQuotes: (id) => request('GET', `/watchlists/${id}/quotes`),
 
-  getNews: (symbols, limit = 20) => {
-    const p = new URLSearchParams({ limit })
+  getNews: (symbols, limit = 20, market) => {
+    const p = new URLSearchParams({ limit, market: mkt(market) })
     if (symbols) p.set('symbols', symbols)
     return request('GET', `/market/news?${p}`)
   },
   getSnapshots: (symbols) => request('GET', `/market/snapshots?symbols=${symbols}`),
-  screenStocks: (params = {}) => {
+  screenStocks: (params = {}, market) => {
     const p = new URLSearchParams()
     Object.entries(params).forEach(([k, v]) => v !== '' && v !== undefined && p.set(k, v))
+    p.set('market', mkt(market))
     return request('GET', `/market/screener?${p}`)
   },
 
@@ -137,15 +146,16 @@ export const api = {
   // ── Tape / quotes / movers / crypto / sentiment ──────────────
   getTrades: (symbol, limit = 200) => request('GET', `/market/trades/${symbol}?limit=${limit}`),
   getQuotes: (symbol, limit = 200) => request('GET', `/market/quotes/${symbol}?limit=${limit}`),
-  getMovers: (top = 25) => request('GET', `/market/movers?top=${top}`),
-  getMostActives: (top = 25, by = 'volume') => request('GET', `/market/most-actives?top=${top}&by=${by}`),
+  getMovers: (top = 25, market) => request('GET', `/market/movers?top=${top}&market=${mkt(market)}`),
+  getMostActives: (top = 25, by = 'volume', market) => request('GET', `/market/most-actives?top=${top}&by=${by}&market=${mkt(market)}`),
   getCryptoSnapshots: (symbols) => request('GET', `/market/crypto/snapshots?symbols=${encodeURIComponent(symbols)}`),
   getCryptoBars: (symbol, days = 180, timeframe = '1Day') =>
     request('GET', `/market/crypto/bars/${encodeURIComponent(symbol)}?days=${days}&timeframe=${timeframe}`),
   getNewsSentiment: (symbol, limit = 30) => request('GET', `/market/news-sentiment/${symbol}?limit=${limit}`),
+  // (per-symbol news routes by the symbol's suffix on the backend)
 
   // ── Sentiment scanner (ranked top picks) ─────────────────────
-  getSentimentUniverses: () => request('GET', '/market/sentiment-scan/universes'),
+  getSentimentUniverses: (market) => request('GET', `/market/sentiment-scan/universes?market=${mkt(market)}`),
   getSentimentScan: ({ universe = 'megacap', symbols = '', refresh = false } = {}) => {
     const p = new URLSearchParams({ universe })
     if (symbols) p.set('symbols', symbols)
