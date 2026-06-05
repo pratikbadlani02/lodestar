@@ -27,7 +27,7 @@ import pandas as pd
 
 from app.core.logging import get_logger
 from app.services import fundamentals as fund
-from app.services.broker import AlpacaError, get_broker
+from app.core.markets import benchmark_for
 
 logger = get_logger(__name__)
 
@@ -108,17 +108,10 @@ def _clean(v: Any) -> Any:
     return v
 
 
-async def _fetch_bars(symbol: str, days: int = 365 * 6) -> pd.DataFrame:
-    """Pull daily bars from Alpaca and return as a sorted DataFrame indexed by date."""
-    broker = get_broker()
-    start = datetime.now(timezone.utc) - timedelta(days=days)
-    try:
-        bars = await broker.get_bars(
-            symbol=symbol.upper(), timeframe="1Day", start=start
-        )
-    except AlpacaError as e:
-        logger.warning("bars_fetch_failed", symbol=symbol, error=str(e))
-        return pd.DataFrame()
+async def _fetch_bars(symbol: str, days: int = 365 * 6, market=None) -> pd.DataFrame:
+    """Pull daily bars (market-aware: Alpaca for US, yfinance for IN)."""
+    from app.services.market_data import get_price_bars
+    bars = await get_price_bars(symbol, days=days, timeframe="1Day", market=market)
     if not bars:
         return pd.DataFrame()
     df = pd.DataFrame(bars)
@@ -509,7 +502,7 @@ async def get_full_analysis(symbol: str) -> dict[str, Any]:
         "score": score,
         "returns": returns,
         "benchmark_returns": bench_returns,
-        "benchmark_symbol": BENCHMARK,
+        "benchmark_symbol": benchmark_for(sym),
         "technicals": technicals,
         "risk": risk,
         "seasonality": seasonality,
@@ -840,8 +833,10 @@ async def _gather(symbol: str):
     """Fetch bars + benchmark + profile + analyst data in parallel."""
     import asyncio
 
+    from app.core.markets import detect_market
+    bench = benchmark_for(symbol)
     df_task = _fetch_bars(symbol)
-    bench_task = _fetch_bars(BENCHMARK)
+    bench_task = _fetch_bars(bench, market=detect_market(symbol))
     profile_task = fund.get_profile(symbol)
     analyst_task = fund.get_analyst_data(symbol)
 

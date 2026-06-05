@@ -5,6 +5,15 @@ export function fmtPrice(v, d = 2) {
   return `$${Number(v).toFixed(d)}`
 }
 
+// Currency-aware money formatter. `cur` is a currency symbol ('$', '₹', …) and
+// defaults to USD so existing callers are unaffected. Use with the active
+// market's symbol (see MarketContext) or currencySymbolOf(symbol).
+export function fmtMoney(v, cur = '$', d = 2) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const n = Number(v)
+  return `${cur}${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`
+}
+
 export function fmtNum(v, d = 2) {
   if (v == null || Number.isNaN(Number(v))) return '—'
   return Number(v).toLocaleString(undefined, { maximumFractionDigits: d })

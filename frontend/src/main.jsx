@@ -6,6 +6,7 @@ import App from './App.jsx'
 import { SymbolProvider } from './lib/SymbolContext'
 import { ThemeProvider } from './lib/ThemeContext'
 import { DensityProvider } from './lib/DensityContext'
+import { MarketProvider } from './lib/MarketContext'
 import { initStoreWS } from './lib/store'
 
 // Boot the global store + single WebSocket. Auth-gated so the WS only opens
@@ -16,9 +17,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
     <ThemeProvider>
       <DensityProvider>
-        <SymbolProvider>
-          <App />
-        </SymbolProvider>
+        <MarketProvider>
+          <SymbolProvider>
+            <App />
+          </SymbolProvider>
+        </MarketProvider>
       </DensityProvider>
     </ThemeProvider>
   </BrowserRouter>

@@ -54,8 +54,9 @@ export const api = {
   resumeStrategies: () => request('POST', '/control/strategies/resume'),
   liquidate: (reason) => request('POST', '/control/liquidate', { reason }),
 
-  getAccount: () => request('GET', '/account'),
-  getPositions: () => request('GET', '/positions'),
+  getMarkets: () => request('GET', '/market/markets'),
+  getAccount: (market) => request('GET', `/account${market ? `?market=${market}` : ''}`),
+  getPositions: (market) => request('GET', `/positions${market ? `?market=${market}` : ''}`),
 
   listStrategyTypes: () => request('GET', '/strategies/available'),
   listStrategies: () => request('GET', '/strategies'),

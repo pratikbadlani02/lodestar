@@ -61,8 +61,12 @@ class RiskManager:
         side: str,
         qty: Decimal,
         reference_price: Decimal | None = None,
+        market: Any = None,
     ) -> RiskCheckResult:
         details: dict[str, Any] = {}
+        if market is None:
+            from app.core.markets import detect_market
+            market = detect_market(symbol)
 
         # 1. Global kill switch
         if not await is_trading_enabled():
@@ -80,8 +84,8 @@ class RiskManager:
                 details={"max_per_minute": settings.max_orders_per_minute},
             )
 
-        # 3. Get broker account
-        broker = get_broker()
+        # 3. Get broker account (market-aware: Alpaca for US, sim for IN)
+        broker = get_broker(market)
         try:
             account = await broker.get_account()
             positions = await broker.get_positions()

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.markets import list_markets
 from app.core.models import OHLCV
 from app.services import fundamentals as fund
 from app.services import stock_analysis as analysis
@@ -14,6 +15,15 @@ from app.services.broker import AlpacaError, get_broker
 from app.services.market_data import fetch_and_store_bars, get_bars_df
 
 router = APIRouter(prefix="/market", tags=["Market Data"])
+
+# Alpaca "1d" ↔ fetch "1Day" mapping for the on-demand backfill below.
+_FETCH_TF = {"1d": "1Day", "1h": "1Hour", "15m": "15Min", "5m": "5Min", "1m": "1Min"}
+
+
+@router.get("/markets")
+async def get_markets() -> dict:
+    """Available trading markets for the UI selector (US, India)."""
+    return {"markets": list_markets()}
 
 
 @router.get("/ohlcv/{symbol}")
@@ -25,6 +35,14 @@ async def get_ohlcv(
 ) -> dict:
     start = datetime.now(timezone.utc) - timedelta(days=days)
     df = await get_bars_df(db, symbol=symbol, timeframe=timeframe, start=start)
+    # On a cold cache (common for Indian symbols on first view), backfill once
+    # from the symbol's data source, then re-read.
+    if df.empty:
+        await fetch_and_store_bars(
+            db, symbol=symbol, timeframe=_FETCH_TF.get(timeframe, "1Day"),
+            lookback_days=days,
+        )
+        df = await get_bars_df(db, symbol=symbol, timeframe=timeframe, start=start)
     return {
         "symbol": symbol.upper(),
         "timeframe": timeframe,

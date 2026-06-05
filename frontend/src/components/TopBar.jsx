@@ -4,6 +4,7 @@ import { Search, X, Clock, ArrowUpRight, ArrowDownRight, Sun, Moon, Rows3, Rows2
 import { useSymbol } from '../lib/SymbolContext'
 import { useTheme } from '../lib/ThemeContext'
 import { useDensity } from '../lib/DensityContext'
+import { useMarket, MARKETS, marketOf, currencySymbolOf } from '../lib/MarketContext'
 import { api } from '../lib/api'
 import { fmt, fmtSigned, fmtSignedPct } from './ui/format'
 import { searchSymbols, nameFor, typeLabel } from '../lib/symbolDirectory'
@@ -23,6 +24,7 @@ export default function TopBar({ onMenuOpen }) {
   const { symbol, setSymbol, recents, removeRecent } = useSymbol()
   const { theme, toggle: toggleTheme } = useTheme()
   const { density, cycle: cycleDensity } = useDensity()
+  const { market, setMarket } = useMarket()
   const [input, setInput] = useState('')
   const [snap, setSnap] = useState(null)
   const [open, setOpen] = useState(false)
@@ -34,10 +36,21 @@ export default function TopBar({ onMenuOpen }) {
   // boosted by recents; recents list when the box is empty.
   const suggestions = useMemo(() => {
     if (input.trim()) {
-      return searchSymbols(input, 8, recents).map((d) => ({ s: d.s, n: d.n, t: d.t }))
+      return searchSymbols(input, 8, recents, market).map((d) => ({ s: d.s, n: d.n, t: d.t }))
     }
-    return (recents || []).slice(0, 8).map((s) => ({ s, n: nameFor(s) || '', t: null }))
-  }, [input, recents])
+    return (recents || [])
+      .filter((s) => marketOf(s) === market)
+      .slice(0, 8)
+      .map((s) => ({ s, n: nameFor(s) || '', t: null }))
+  }, [input, recents, market])
+
+  // Switching market moves the active symbol to that market's default unless
+  // the current symbol already belongs to the new market.
+  function switchMarket(code) {
+    if (code === market) return
+    setMarket(code)
+    if (marketOf(symbol) !== code) setSymbol(MARKETS[code].defaultSymbol)
+  }
 
   useEffect(() => { setHi(0) }, [input])
 
@@ -177,7 +190,7 @@ export default function TopBar({ onMenuOpen }) {
         <span className="font-display font-semibold text-sm text-ink-1 group-hover:text-brand transition-colors">{symbol}</span>
         {snap?.last != null && (
           <>
-            <span className="font-mono tabular text-sm font-semibold text-ink-1">${fmt(snap.last)}</span>
+            <span className="font-mono tabular text-sm font-semibold text-ink-1">{currencySymbolOf(symbol)}{fmt(snap.last)}</span>
             {snap.change != null && (
               <span className={`inline-flex items-center gap-0.5 text-xs font-mono tabular ${up ? 'text-up' : 'text-down'}`}>
                 {up ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
@@ -225,11 +238,30 @@ export default function TopBar({ onMenuOpen }) {
         </button>
       </div>
 
+      {/* Market selector — US ⇄ India */}
+      <div className="ml-auto md:ml-0 flex items-center gap-0.5 bg-white/[0.025] border border-white/[0.06] rounded-lg p-0.5 shrink-0">
+        {Object.values(MARKETS).map((m) => (
+          <button
+            key={m.code}
+            onClick={() => switchMarket(m.code)}
+            title={`${m.label} (${m.currency})`}
+            className={`text-2xs font-semibold uppercase tracking-[0.1em] px-2 py-1 rounded-md transition flex items-center gap-1 ${
+              market === m.code
+                ? 'bg-accent/15 text-accent'
+                : 'text-ink-3 hover:text-ink-1 hover:bg-white/[0.06]'
+            }`}
+          >
+            <span className="text-[13px] leading-none">{m.flag}</span>
+            <span className="hidden sm:inline">{m.short}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Density toggle — cycle compact / cozy / comfortable */}
       <button
         onClick={cycleDensity}
         title={`Density: ${density} (click to cycle)`}
-        className="ml-auto md:ml-0 w-9 h-9 rounded-lg bg-white/[0.04] hover:bg-accent/15 border border-white/[0.06] hover:border-accent/30 text-ink-3 hover:text-accent flex items-center justify-center transition shrink-0"
+        className="w-9 h-9 rounded-lg bg-white/[0.04] hover:bg-accent/15 border border-white/[0.06] hover:border-accent/30 text-ink-3 hover:text-accent flex items-center justify-center transition shrink-0"
       >
         {density === 'compact'
           ? <Rows4 size={14} />

@@ -14,6 +14,11 @@ import { create } from 'zustand'
 import { api, connectWebSocket } from './api'
 import { toast } from './toast'
 
+// Active market for account/positions scoping (mirrors MarketContext storage).
+function currentMarket() {
+  try { return localStorage.getItem('quant_market_v1') || 'us' } catch { return 'us' }
+}
+
 const inflight = new Map()
 function coalesce(key, fn) {
   if (inflight.has(key)) return inflight.get(key)
@@ -38,12 +43,18 @@ export const useStore = create((set, get) => ({
   // ── Account & positions ──────────────────────────────────
   account: null,
   positions: [],
-  loadAccount: () => coalesce('account', async () => {
-    try { set({ account: await api.getAccount() }) } catch {}
-  }),
-  loadPositions: () => coalesce('positions', async () => {
-    try { set({ positions: await api.getPositions() }) } catch {}
-  }),
+  loadAccount: () => {
+    const mkt = currentMarket()
+    return coalesce(`account:${mkt}`, async () => {
+      try { set({ account: await api.getAccount(mkt) }) } catch {}
+    })
+  },
+  loadPositions: () => {
+    const mkt = currentMarket()
+    return coalesce(`positions:${mkt}`, async () => {
+      try { set({ positions: await api.getPositions(mkt) }) } catch {}
+    })
+  },
 
   // ── Orders ───────────────────────────────────────────────
   // `*Loaded` flags flip true after the first fetch resolves (success OR
@@ -157,6 +168,13 @@ export function initStoreWS() {
     st.loadOrders()
     st.loadAlerts()
   }, 30000)
+
+  // Re-pull the account + positions when the user switches market.
+  window.addEventListener('market:change', () => {
+    const st = useStore.getState()
+    st.loadAccount()
+    st.loadPositions()
+  })
 
   // WS connection — store router gets every message
   const ws = connectWebSocket((msg) => useStore.getState()._onWsMessage(msg))

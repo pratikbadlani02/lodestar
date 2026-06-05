@@ -448,5 +448,51 @@ JSON) and audited regardless of outcome — nothing is silently dropped.
 
 ---
 
+---
+
+## 8. Multi-market (US + India)
+
+Lodestar supports two markets behind a global selector. **The market is derived
+from the symbol's exchange suffix**, so the backend stays largely stateless about
+it: Indian tickers carry `.NS` (NSE) or `.BO` (BSE) — e.g. `RELIANCE.NS` — while
+US tickers are bare (`AAPL`). `app/core/markets.py` (`detect_market`, `meta`,
+`to_yf_symbol`, `benchmark_for`) is the single source of truth.
+
+| Concern | US | India |
+|---------|----|----|
+| Data source | Alpaca REST | Yahoo Finance (yfinance), `.NS`/`.BO` |
+| Trading | Alpaca (paper/live) | **Simulated** — Redis-backed ledger (`SimBroker`) |
+| Currency | USD ($) | INR (₹) |
+| Calendar | Alpaca clock | NSE 09:15–15:30 IST + holiday list (`market_calendar.py`) |
+| Benchmark | SPY | `^NSEI` (Nifty 50) |
+| Seed capital | live account | ₹10,00,000 simulated |
+
+**Routing.** `get_broker(market)` returns the `AlpacaBroker` for US and a
+per-market `SimBroker` for India. `execute_order()` derives the market from the
+symbol, resolves the broker, and runs the **same 8-check risk gate** (the gate
+takes a `market` arg and resolves the matching broker/clock). Indian orders fill
+instantly against the sim ledger (cash + positions in Redis under `sim:in:*`) and
+are marked `FILLED` immediately. `fetch_and_store_bars`/`get_price_bars` route US
+→ Alpaca and IN → yfinance; bars for both coexist in `ohlcv` (the suffix
+namespaces Indian rows). Backtests are currency-agnostic — they work for Indian
+symbols unchanged because the data layer routes by suffix.
+
+**Order flow (India), vs §4.2:** identical pipeline — persist `PENDING_RISK` →
+risk gate (kill switch, rate limit, **NSE** hours, sim account/buying-power) →
+`SimBroker.submit_order` fills at the latest yfinance close → `FILLED` + audit.
+
+**Frontend.** A `MarketProvider` + US/India toggle in the TopBar scopes the
+symbol search universe, the currency symbol, and which account
+(`/account?market=`) the dashboard pulls. Switching market emits a
+`market:change` event the store listens to, re-pulling account/positions.
+
+**Limits / follow-ups.** No live Indian broker (simulated only, by design);
+Alpaca-only widgets (news, movers, most-actives) remain US; per-page currency
+symbols on some deep views still show `$` (the account `currency` field is
+available to migrate them); yfinance is subject to Yahoo rate-limits from
+datacenter IPs (same self-healing cache caveat as fundamentals).
+
+---
+
 *See also:* `docs/BUILD_FROM_SCRATCH.md` (component-by-component build guide),
 `CLAUDE.md` (repo conventions), `DEPLOY.md` (deployment walkthrough).

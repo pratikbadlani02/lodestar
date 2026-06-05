@@ -122,6 +122,8 @@ class PositionRead(BaseModel):
 # ── Account ─────────────────────────────────────────────────────────────────
 class AccountRead(BaseModel):
     mode: TradingMode
+    market: str = "us"
+    currency: str = "USD"
     cash: Decimal
     equity: Decimal
     buying_power: Decimal

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.logging import get_logger
+from app.core.markets import detect_market
 from app.core.models import (
     AccountSnapshot, Backtest, BacktestStatus, BacktestTrade,
     Order, OrderSide, OrderStatus, Position, PriceAlert, Strategy,
@@ -43,10 +44,6 @@ logger = get_logger(__name__)
 async def run_active_strategies() -> dict:
     if not await is_strategies_enabled():
         return {"status": "paused"}
-    if not await is_market_open():
-        return {"status": "market_closed"}
-    if not await is_trading_day():
-        return {"status": "non_trading_day"}
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -56,16 +53,30 @@ async def run_active_strategies() -> dict:
         if not strategies:
             return {"status": "ok", "count": 0}
 
-        broker = get_broker()
         total_signals = 0
         total_orders = 0
+        # Cache per-market equity + open-state so we hit each broker once.
+        _equity_cache: dict[str, Decimal] = {}
+        _open_cache: dict[str, bool] = {}
 
-        try:
-            acct = await broker.get_account()
-            equity = Decimal(acct.get("equity", "0"))
-        except AlpacaError as e:
-            logger.error("acct_fetch_failed", error=str(e))
-            return {"status": "broker_error", "error": str(e)}
+        async def _market_equity(mkt: str) -> Decimal | None:
+            if mkt in _equity_cache:
+                return _equity_cache[mkt]
+            try:
+                acct = await get_broker(mkt).get_account()
+                eq = Decimal(acct.get("equity", "0"))
+            except AlpacaError as e:
+                logger.error("acct_fetch_failed", market=mkt, error=str(e))
+                eq = None
+            _equity_cache[mkt] = eq
+            return eq
+
+        async def _market_open(mkt: str) -> bool:
+            if mkt not in _open_cache:
+                _open_cache[mkt] = (
+                    await is_market_open(mkt) and await is_trading_day(mkt)
+                )
+            return _open_cache[mkt]
 
         for strat in strategies:
             run = StrategyRun(strategy_id=strat.id)
@@ -73,6 +84,21 @@ async def run_active_strategies() -> dict:
             await db.flush()
 
             try:
+                # Market is inferred from the strategy's symbols (suffix → IN).
+                strat_market = (
+                    detect_market(strat.symbols[0]).value if strat.symbols else "us"
+                )
+                if not await _market_open(strat_market):
+                    run.completed_at = datetime.now(timezone.utc)
+                    run.details = {"skipped": "market_closed", "market": strat_market}
+                    await db.flush()
+                    continue
+                equity = await _market_equity(strat_market)
+                if equity is None:
+                    run.error = "broker_unavailable"
+                    await db.flush()
+                    continue
+
                 strategy = get_strategy(strat.strategy_type, strat.params)
                 signals_count = 0
                 orders_count = 0

@@ -295,7 +295,20 @@ class AlpacaBroker:
 _broker: AlpacaBroker | None = None
 
 
-def get_broker() -> AlpacaBroker:
+def get_broker(market: Any = None):
+    """
+    Resolve the broker for a market.
+
+    Defaults to the Alpaca broker (US). Indian / simulated markets resolve to a
+    Redis-backed paper broker. The import of the sim broker is lazy to avoid a
+    circular import (sim_broker → market_data → broker).
+    """
+    from app.core.markets import Market, get_market
+
+    if market is not None and get_market(market) != Market.US:
+        from app.services.sim_broker import get_sim_broker
+        return get_sim_broker(market)
+
     global _broker
     if _broker is None:
         _broker = AlpacaBroker()

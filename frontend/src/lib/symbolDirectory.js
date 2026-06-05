@@ -109,7 +109,42 @@ const RAW = [
   ['LTC/USD', 'Litecoin', 'c'],
 ]
 
-export const SYMBOLS = RAW.map(([s, n, t]) => ({ s, n, t }))
+// ── India · NSE (suffixed .NS — the suffix tells the backend it's Indian) ──────
+// Format: [ticker, name, type]  (all market 'in')
+const RAW_IN = [
+  ['RELIANCE.NS', 'Reliance Industries', 's'], ['TCS.NS', 'Tata Consultancy Services', 's'],
+  ['HDFCBANK.NS', 'HDFC Bank', 's'], ['INFY.NS', 'Infosys', 's'],
+  ['ICICIBANK.NS', 'ICICI Bank', 's'], ['HINDUNILVR.NS', 'Hindustan Unilever', 's'],
+  ['SBIN.NS', 'State Bank of India', 's'], ['BHARTIARTL.NS', 'Bharti Airtel', 's'],
+  ['ITC.NS', 'ITC Ltd.', 's'], ['KOTAKBANK.NS', 'Kotak Mahindra Bank', 's'],
+  ['LT.NS', 'Larsen & Toubro', 's'], ['AXISBANK.NS', 'Axis Bank', 's'],
+  ['BAJFINANCE.NS', 'Bajaj Finance', 's'], ['ASIANPAINT.NS', 'Asian Paints', 's'],
+  ['MARUTI.NS', 'Maruti Suzuki', 's'], ['HCLTECH.NS', 'HCL Technologies', 's'],
+  ['SUNPHARMA.NS', 'Sun Pharmaceutical', 's'], ['TITAN.NS', 'Titan Company', 's'],
+  ['ULTRACEMCO.NS', 'UltraTech Cement', 's'], ['WIPRO.NS', 'Wipro', 's'],
+  ['NESTLEIND.NS', 'Nestlé India', 's'], ['ONGC.NS', 'Oil & Natural Gas Corp.', 's'],
+  ['NTPC.NS', 'NTPC Ltd.', 's'], ['POWERGRID.NS', 'Power Grid Corp.', 's'],
+  ['TATAMOTORS.NS', 'Tata Motors', 's'], ['TATASTEEL.NS', 'Tata Steel', 's'],
+  ['ADANIENT.NS', 'Adani Enterprises', 's'], ['ADANIPORTS.NS', 'Adani Ports & SEZ', 's'],
+  ['JSWSTEEL.NS', 'JSW Steel', 's'], ['COALINDIA.NS', 'Coal India', 's'],
+  ['BAJAJFINSV.NS', 'Bajaj Finserv', 's'], ['M&M.NS', 'Mahindra & Mahindra', 's'],
+  ['TECHM.NS', 'Tech Mahindra', 's'], ['GRASIM.NS', 'Grasim Industries', 's'],
+  ['HINDALCO.NS', 'Hindalco Industries', 's'], ['DRREDDY.NS', "Dr. Reddy's Labs", 's'],
+  ['CIPLA.NS', 'Cipla', 's'], ['BRITANNIA.NS', 'Britannia Industries', 's'],
+  ['EICHERMOT.NS', 'Eicher Motors', 's'], ['BPCL.NS', 'Bharat Petroleum', 's'],
+  ['DIVISLAB.NS', "Divi's Laboratories", 's'], ['HEROMOTOCO.NS', 'Hero MotoCorp', 's'],
+  ['INDUSINDBK.NS', 'IndusInd Bank', 's'], ['APOLLOHOSP.NS', 'Apollo Hospitals', 's'],
+  ['TATACONSUM.NS', 'Tata Consumer Products', 's'], ['BAJAJ-AUTO.NS', 'Bajaj Auto', 's'],
+  ['SBILIFE.NS', 'SBI Life Insurance', 's'], ['HDFCLIFE.NS', 'HDFC Life Insurance', 's'],
+  ['LTIM.NS', 'LTIMindtree', 's'], ['DMART.NS', 'Avenue Supermarts (DMart)', 's'],
+  ['NIFTYBEES.NS', 'Nippon India Nifty 50 ETF', 'e'],
+  ['BANKBEES.NS', 'Nippon India Nifty Bank ETF', 'e'],
+]
+
+export const SYMBOLS = [
+  ...RAW.map(([s, n, t]) => ({ s, n, t, m: 'us' })),
+  ...RAW_IN.map(([s, n, t]) => ({ s, n, t, m: 'in' })),
+]
 
 // Quick lookup of a display name for a ticker (used to annotate recents, etc.).
 const NAME_MAP = new Map(SYMBOLS.map((x) => [x.s, x.n]))
@@ -121,8 +156,10 @@ const TYPE_LABEL = { s: 'Stock', e: 'ETF', c: 'Crypto' }
 export function typeLabel(t) { return TYPE_LABEL[t] || '' }
 
 // Ranked search over ticker + company name. `boost` (e.g. recents/watchlist)
-// floats already-known symbols to the top. Returns [{ s, n, t, score }].
-export function searchSymbols(query, limit = 8, boost = []) {
+// floats already-known symbols to the top. `market` ('us'|'in') scopes the
+// universe to one market (crypto/US are hidden when 'in' is active).
+// Returns [{ s, n, t, m, score }].
+export function searchSymbols(query, limit = 8, boost = [], market = null) {
   const q = String(query || '').trim()
   if (!q) return []
   const qu = q.toUpperCase()
@@ -130,6 +167,7 @@ export function searchSymbols(query, limit = 8, boost = []) {
   const boostSet = new Set((boost || []).map((b) => String(b).toUpperCase()))
   const out = []
   for (const it of SYMBOLS) {
+    if (market && it.m !== market) continue
     const s = it.s
     const nl = it.n.toLowerCase()
     let score = 0
