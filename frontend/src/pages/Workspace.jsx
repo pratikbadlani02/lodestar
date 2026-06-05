@@ -8,6 +8,7 @@ import ChartWidget from '../components/ChartWidget'
 import { api } from '../lib/api'
 import { toast } from '../lib/toast'
 import { useSymbol } from '../lib/SymbolContext'
+import { useMarket } from '../lib/MarketContext'
 import { fmt, fmtSigned, fmtSignedPct, fmtBig, signClass, fmtPrice, activeCurrency } from '../components/ui/format'
 import { Card, SectionHeader, Pill } from '../components/ui/primitives'
 
@@ -16,6 +17,7 @@ const DEFAULT_WATCH = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 
 // ── Watchlist column ─────────────────────────────────────────────
 function WatchlistColumn() {
   const { symbol, setSymbol } = useSymbol()
+  const { market } = useMarket()
   const [lists, setLists] = useState([])
   const [activeListId, setActiveListId] = useState(null)
   const [symbols, setSymbols] = useState(DEFAULT_WATCH)
@@ -25,14 +27,17 @@ function WatchlistColumn() {
   const [newSym, setNewSym] = useState('')
 
   useEffect(() => {
-    api.listWatchlists().then((rs) => {
+    api.listWatchlists(market).then((rs) => {
       setLists(rs || [])
       if (rs?.length) {
         setActiveListId(rs[0].id)
         setSymbols(rs[0].symbols || DEFAULT_WATCH)
+      } else {
+        setActiveListId(null)
+        setSymbols(DEFAULT_WATCH)
       }
     }).catch(() => setLists([]))
-  }, [])
+  }, [market])
 
   useEffect(() => {
     if (!activeListId) return

@@ -59,7 +59,7 @@ export default function SentimentScanner() {
     }).catch(() => setPresets(FALLBACK_PRESETS))
     let hasToken = false
     try { hasToken = !!sessionStorage.getItem('quant_token') } catch { /* ignore */ }
-    if (hasToken) api.listWatchlists().then((ws) => setWatchlists(Array.isArray(ws) ? ws : [])).catch(() => {})
+    if (hasToken) api.listWatchlists(market).then((ws) => setWatchlists(Array.isArray(ws) ? ws : [])).catch(() => {})
   }, [market])
 
   const fetchScan = useCallback(async (selection, refresh = false) => {

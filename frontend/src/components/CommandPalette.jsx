@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useSymbol } from '../lib/SymbolContext'
 import { useTheme } from '../lib/ThemeContext'
+import { useMarket, marketOf } from '../lib/MarketContext'
 import { api } from '../lib/api'
 import { searchSymbols, nameFor } from '../lib/symbolDirectory'
 
@@ -68,6 +69,7 @@ export default function CommandPalette() {
   const navigate = useNavigate()
   const { symbol, setSymbol, recents } = useSymbol()
   const { theme, toggle: toggleTheme } = useTheme()
+  const { market } = useMarket()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
@@ -109,13 +111,14 @@ export default function CommandPalette() {
 
     // Symbols section — searches the bundled directory (ticker OR company name),
     // with recents/watchlist boosted to the top. Falls back to a "Go to" entry
-    // for any literal ticker not in the directory.
+    // for any literal ticker not in the directory. Filter by market.
     const knownPool = Array.from(new Set([...(recents || []), ...railSymbols]))
+      .filter((s) => marketOf(s) === market)
     let symMatches = []
     if (!q) {
       symMatches = knownPool.slice(0, 7).map((s) => ({ kind: 'symbol', value: s, label: s, hint: nameFor(s) || '' }))
     } else {
-      symMatches = searchSymbols(q, 8, knownPool)
+      symMatches = searchSymbols(q, 8, knownPool, market)
         .map((d) => ({ kind: 'symbol', value: d.s, label: d.s, hint: d.n }))
       // Include recents/watchlist matches that aren't in the directory.
       const present = new Set(symMatches.map((i) => i.value))

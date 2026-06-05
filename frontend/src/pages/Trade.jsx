@@ -6,6 +6,7 @@ import {
 import { api } from '../lib/api'
 import ChartWidget from '../components/ChartWidget'
 import { activeCurrency } from '../components/ui/format'
+import { useMarket } from '../lib/MarketContext'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ const OPEN_STATUSES = new Set(['pending_new', 'new', 'accepted', 'submitted', 'p
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function Trade({ isPaper = false }) {
+  const { market } = useMarket()
   // Watchlist / symbol selection
   const [watchlists, setWatchlists]               = useState([])
   const [activeWatchlistId, setActiveWatchlistId] = useState(null)
@@ -76,11 +78,12 @@ export default function Trade({ isPaper = false }) {
   // ── Load watchlists ───────────────────────────────────────────────────────
 
   useEffect(() => {
-    api.listWatchlists().then(data => {
+    api.listWatchlists(market).then(data => {
       setWatchlists(data || [])
       if (data && data.length > 0) setActiveWatchlistId(data[0].id)
+      else setActiveWatchlistId(null)
     }).catch(() => {})
-  }, [])
+  }, [market])
 
   // ── Load quotes + poll ────────────────────────────────────────────────────
 

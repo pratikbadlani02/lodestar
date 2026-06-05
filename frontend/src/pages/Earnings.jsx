@@ -128,11 +128,7 @@ export default function Earnings() {
   const ctx = useSymbolContextMenu()
 
   useEffect(() => {
-    api.listWatchlists().then(setWatchlists).catch(() => setWatchlists([]))
-  }, [])
-
-  // Reset the calendar universe to the market's default when the market switches.
-  useEffect(() => {
+    api.listWatchlists(market).then(setWatchlists).catch(() => setWatchlists([]))
     setSymbolsInput(marketDefault)
     setSymbols(marketDefault)
     setSelected('')

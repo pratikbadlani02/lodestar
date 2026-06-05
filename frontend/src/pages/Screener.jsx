@@ -139,7 +139,7 @@ export default function Screener() {
   const [presetName, setPresetName] = useState('')
 
   // Load watchlists once
-  useEffect(() => { api.listWatchlists().then(setWatchlists).catch(() => {}) }, [])
+  useEffect(() => { api.listWatchlists(market).then(setWatchlists).catch(() => {}) }, [market])
 
   // Auto-run on mount and whenever the market switches
   useEffect(() => { runScreener() }, [market])

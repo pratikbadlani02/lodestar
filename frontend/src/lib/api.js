@@ -106,7 +106,7 @@ export const api = {
   exportBacktestCsv: (id) => window.open(`${BASE}/export/backtest/${id}/trades.csv`, '_blank'),
 
   // ── v3 Webull features ────────────────────────────────────────
-  listWatchlists: () => request('GET', '/watchlists'),
+  listWatchlists: (market) => request('GET', `/watchlists?market=${mkt(market)}`),
   createWatchlist: (d) => request('POST', '/watchlists', d),
   updateWatchlist: (id, d) => request('PATCH', `/watchlists/${id}`, d),
   deleteWatchlist: (id) => request('DELETE', `/watchlists/${id}`),

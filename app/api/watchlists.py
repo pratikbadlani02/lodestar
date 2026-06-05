@@ -33,13 +33,20 @@ async def create_watchlist(
 
 @router.get("", response_model=list[WatchlistRead])
 async def list_watchlists(
+    market: str = "us",
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_current_user),
 ) -> list[Watchlist]:
+    """List watchlists for the user, filtered by market (US-only or India-only)."""
+    from app.core.markets import Market, detect_market
     result = await db.execute(
         select(Watchlist).where(Watchlist.owner == user).order_by(Watchlist.created_at.asc())
     )
-    return list(result.scalars().all())
+    all_watchlists = list(result.scalars().all())
+    if market == "in":
+        return [w for w in all_watchlists if w.symbols and all(detect_market(s) == Market.IN for s in w.symbols)]
+    else:
+        return [w for w in all_watchlists if w.symbols and all(detect_market(s) == Market.US for s in w.symbols)]
 
 
 @router.get("/{watchlist_id}", response_model=WatchlistRead)
