@@ -117,7 +117,7 @@ export const api = {
     if (symbols) p.set('symbols', symbols)
     return request('GET', `/market/news?${p}`)
   },
-  getSnapshots: (symbols) => request('GET', `/market/snapshots?symbols=${symbols}`),
+  getSnapshots: (symbols, market) => request('GET', `/market/snapshots?symbols=${symbols}&market=${mkt(market)}`),
   screenStocks: (params = {}, market) => {
     const p = new URLSearchParams()
     Object.entries(params).forEach(([k, v]) => v !== '' && v !== undefined && p.set(k, v))

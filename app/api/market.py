@@ -183,16 +183,27 @@ async def screener(
 @router.get("/snapshots")
 async def get_snapshots(
     symbols: str = Query(..., description="Comma-separated symbols, e.g. AAPL,TSLA"),
+    market: str = Query(default="us", description="Hint for ambiguous index symbols (^NSEI): us | in"),
 ) -> dict:
     """Quote snapshots, routed per-symbol by exchange suffix: Alpaca for US
     tickers, yfinance for Indian (.NS/.BO) tickers. A mixed batch (e.g. a
     cross-market watchlist) is split and merged so each symbol gets the right
-    source regardless of the active market selector."""
+    source. Index symbols (``^NSEI``, ``^GSPC``) carry no suffix, so the
+    ``market`` hint decides their source."""
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     if not sym_list:
         raise HTTPException(status_code=400, detail="No symbols provided")
-    in_syms = [s for s in sym_list if detect_market(s) == Market.IN]
-    us_syms = [s for s in sym_list if detect_market(s) == Market.US]
+    hint = get_market(market)
+
+    def route(sym: str) -> Market:
+        # Index symbols are ambiguous (^NSEI is Indian, ^GSPC is US) — defer to
+        # the caller's market hint. Suffix and bare tickers self-identify.
+        if sym.startswith("^"):
+            return hint
+        return detect_market(sym)
+
+    in_syms = [s for s in sym_list if route(s) == Market.IN]
+    us_syms = [s for s in sym_list if route(s) == Market.US]
     data: dict = {}
     if in_syms:
         data.update(await india.get_snapshots(in_syms))
