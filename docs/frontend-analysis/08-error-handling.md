@@ -1,44 +1,50 @@
-# 08 — Error Handling
+# Error Handling
 
-## HTTP status map
+> Project: lodestar
+> Type: react-app
+> Skill: react-frontend-analysis
 
-Central wrapper: [api.js](../../frontend/src/lib/api.js#L16-L46).
+## HTTP Status Map
 
 | Status | Action | Source |
 |---|---|---|
-| `401` (token present) | Clear token, redirect `/login?from=<path>` | [api.js](../../frontend/src/lib/api.js#L28-L37) |
-| `401` (anonymous) | Throw `Error('unauthorized')`, `err.status=401`; page decides | [api.js](../../frontend/src/lib/api.js#L38-L40) |
-| Other `!ok` (4xx/5xx) | Parse JSON/text → throw `Error` (`detail.reason`→`detail`→`HTTP <status>`) with `err.status`/`err.detail` | [api.js](../../frontend/src/lib/api.js#L41-L44) |
-| `204` | Return `null` | [api.js](../../frontend/src/lib/api.js#L45) |
-| `2xx` | Return parsed JSON | [api.js](../../frontend/src/lib/api.js#L46) |
-| `403`/`404` | ⚠️ No dedicated path — generic `!ok` branch | — |
+| `401` (token was present) | Clear `quant_token` from sessionStorage; hard-redirect to `/login?from=<current-path>` | `lib/api.js:28-35` |
+| `401` (no token) | Throw `Error('unauthorized')` with `.status = 401`; page/caller decides how to surface it | `lib/api.js:36` |
+| `204` | Return `null` (no body to parse) | `lib/api.js:43` |
+| Any other non-ok | Extract detail: try JSON parse → read `.detail.reason` or `.detail.detail` or fallback to `.detail`; throw `Error` with `.status` and `.detail` attached | `lib/api.js:38-42` |
+| `2xx` (not 204) | Parse response body as JSON and return | `lib/api.js:44` |
 
-## Error handling
+## Error Handling Table
 
 | Trigger | Condition | Handler | User-facing result | Source |
 |---|---|---|---|---|
-| Session expiry | 401 with token | wrapper redirect | bounced to login, return preserved | [api.js](../../frontend/src/lib/api.js#L28-L37) |
-| API error | 4xx/5xx | page `try/catch` | inline `Alert` / toast | [Login.jsx](../../frontend/src/pages/Login.jsx#L16-L31) |
-| Render crash | exception in page | `ErrorBoundary` | fallback card + Retry/Workspace | [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx) |
-| Background load fail | store loader rejects | `try{}catch{}` + `finally` sets `*Loaded` | ⚠️ silently swallowed | [store.js](../../frontend/src/lib/store.js#L60-L96) |
-| WS drop | socket close | 5s auto-reconnect, `wsConnected=false` | status indicator | [api.js](../../frontend/src/lib/api.js#L205-L209) |
-| Malformed WS msg | JSON parse fail | `try{}catch{}` ignore | none | [api.js](../../frontend/src/lib/api.js#L201-L203) |
+| Route-level render error | Any JS exception thrown during a page component's render/lifecycle | `ErrorBoundary` class component (`componentDidCatch`) | "Something broke on this page" card with Retry and Home buttons; collapsible stack trace | `components/ErrorBoundary.jsx` |
+| Session expiry | `401` response AND `quant_token` was in sessionStorage | `lib/api.js:28-35` — clears token, `window.location.href` redirect | User lands on `/login?from=<previous-path>` | `lib/api.js:28-35` |
+| Anonymous endpoint access | `401` response AND no token | Throw `unauthorized` error | Propagates to page `useEffect` catch — behavior varies by page ⚠️ UNVERIFIED | `lib/api.js:36` |
+| HTTP error (non-401) | `res.ok === false` | Throw error with extracted `detail` | Propagates to caller; most store loaders swallow silently via empty `catch {}` | `lib/api.js:38-42`, `store.js:37,49,55,66,76,84,91` |
+| Login failure | POST `/auth/login` returns non-ok | Throw `Error('Login failed')` | Error message rendered in `<Alert variant="error">` below the form | `pages/Login.jsx:22-24` |
+| WebSocket disconnect | WS `close` event | `connectWebSocket()` schedules itself again after 5 s | No direct user notification; `wsConnected` store flag flips `false` — StatusBar may reflect this | `lib/api.js:188-191` |
+| WS JSON parse failure | `ev.data` is not valid JSON | Silent `try/catch` — message dropped | None | `lib/api.js:186` |
+| Backtest completed (success) | WS `backtest_completed` with `return_pct` | `toast.success()` | Bottom-right toast: "Backtest completed — X.XX% return · N trades" | `store.js:124-128` |
 
-## Error boundary
+## Error Boundary Scope
 
-| Aspect | Value | Source |
-|---|---|---|
-| Type | Class component wrapping `<Outlet/>` | [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx#L8) |
-| Capture | `getDerivedStateFromError` + `componentDidCatch` (console.error) | [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx#L11-L17) |
-| Fallback | Card "Something broke on this page" + collapsible `err.stack` | [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx#L26-L46) |
-| Recovery | Retry (`reset()`) / Workspace (`location='/'`) | [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx#L42-L45) |
-| Scope | Page-level only; chrome survives | [Layout.jsx](../../frontend/src/components/Layout.jsx#L360-L362) |
+`ErrorBoundary` (`components/ErrorBoundary.jsx`) is mounted once in `Layout.jsx:360`, wrapping only the `<Outlet />`. This means:
 
-## Validation & telemetry
+- **Protected:** Every page that renders inside Layout (all routes under `/`).
+- **Not protected:** The `Login` page (it is rendered outside Layout, as a sibling route at `/login`).
+- **Not protected:** Provider-level crashes (`ThemeProvider`, `DensityProvider`, etc.) — these sit above `Layout` in the tree; a crash there would take down the entire app.
 
-| Concern | Finding | Source |
-|---|---|---|
-| Form validation | Native `required` + server error messages; ⚠️ no Zod/Yup | [Login.jsx](../../frontend/src/pages/Login.jsx#L60-L82) |
-| Telemetry | ⚠️ None — `componentDidCatch` has a "hook into Sentry later" placeholder | [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx#L13-L16) |
-| Retry/backoff/timeout | ⚠️ None in HTTP client | [api.js](../../frontend/src/lib/api.js#L16-L46) |
-| Offline handling | ⚠️ None (no detection or mutation queue) | — |
+On recovery (`Retry` button), `ErrorBoundary` calls `this.setState({ err: null })`, which causes React to re-render the children. `Home` button triggers `window.location.href = '/'` (hard navigation).
+
+## Validation Handling
+
+- **Login form:** HTML5 native `required` attributes on username and password `<Input>` elements (`pages/Login.jsx:62,70`). Form will not submit without values; browser shows native validation UI.
+- **No client-side validation library** — no Zod, Yup, react-hook-form, or Formik found in `package.json`.
+- **API validation errors:** Backend Pydantic validation errors arrive as structured `detail` objects; `lib/api.js:39-41` extracts `detail.reason` → `detail.detail` → `detail` → stringified JSON. Callers typically surface these via `toast.apiError(e)` from `lib/toast.js:27-30`.
+
+## Telemetry
+
+- `console.error('Route error:', err, info)` in `ErrorBoundary.componentDidCatch` (`ErrorBoundary.jsx:15`) — logged to browser console only.
+- No Sentry, Datadog, or other observability integration wired. A comment in `ErrorBoundary.jsx:15` explicitly marks this as a future integration point: `"Surface to console for now; hook into Sentry/observability here later."`
+- No `window.onerror` or `window.onunhandledrejection` global handler observed.

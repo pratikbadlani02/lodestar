@@ -1,38 +1,85 @@
-# 09 — Deployment
+# Deployment
 
-## Deployment matrix
+> Project: lodestar
+> Type: react-app
+> Skill: react-frontend-analysis
+
+## Deployment Matrix
 
 | Stage | Command / mechanism | Output / target | Env vars | Notes |
 |---|---|---|---|---|
-| Develop | `npm run dev` (in `frontend/`) | Vite dev server `http://localhost:3000` | none (`VITE_*` unused) | `/api` proxied to `:8000`; run backend separately |
-| Build | `npm run build` | `frontend/dist/` (no sourcemaps) | none | vendor + per-route chunking |
-| Preview | `npm run preview` | local prod preview | none | — |
-| Serve (prod) | FastAPI static mount + SPA fallback | `dist/` served at `/`, single origin | backend-only | mount added last so it can't shadow `/api/*` |
-| Container | Multi-stage `Dockerfile` | stage1 builds `dist/`, stage2 Python runtime serves it | backend env | entrypoint: `alembic upgrade head && uvicorn app.main:app` |
-| Host | Render (`render.yaml`, `autoDeploy` from `main`) | web service + managed Postgres | per Render env | ⚠️ free tier sleeps when idle (keep-alive pinger) |
+| Local dev — frontend | `cd frontend && npm run dev` | `http://localhost:3000` | none required | `/api` proxied to `:8000` via Vite config |
+| Local dev — backend | `uvicorn app.main:app --reload` | `http://localhost:8000` | `.env` file | Must run alongside frontend dev server |
+| Frontend build | `cd frontend && npm run build` | `frontend/dist/` | none | Produces chunked JS + CSS; sourcemaps disabled |
+| Docker image build | `docker build -t lodestar .` | Docker image | — | 2-stage Dockerfile (see below) |
+| Production deploy | Render `autoDeploy: true` on push to `main` | `lodestar-api` web service on Render | See env-var matrix | Container CMD: `alembic upgrade head && uvicorn ...` |
+| DB migration | `alembic upgrade head` | PostgreSQL | `DATABASE_URL_SYNC` | Runs automatically at container startup before uvicorn |
 
-Sources: [frontend/package.json](../../frontend/package.json#L5-L9), [vite.config.js](../../frontend/vite.config.js#L12-L24), [CLAUDE.md](../../CLAUDE.md), [DEPLOY.md](../../DEPLOY.md).
+## Serving Model
 
-## Serving model
+Production runs a **single Docker container** that serves both the FastAPI backend and the React SPA as static files from `frontend/dist/`. There is no separate Nginx; uvicorn serves the frontend assets directly (⚠️ UNVERIFIED — the Dockerfile copies `frontend/dist` into the image, and FastAPI likely has a `StaticFiles` mount at `/` for the SPA catch-all, but the mount is in `app/main.py` which was not confirmed). No CDN configured — all assets served from the Render web service.
 
-Production = **FastAPI serves the built SPA** from `frontend/dist` as static files with an SPA fallback; absent `dist` ⇒ root returns a JSON identity response. Frontend + API share one origin, so the dev proxy is irrelevant in prod. The frontend is environment-agnostic: relative `/api` base ([api.js](../../frontend/src/lib/api.js#L2)) and WS host from `window.location` ([api.js](../../frontend/src/lib/api.js#L196-L198)). No standalone CDN/static host in `frontend/`.
+**Free-tier caveat** (from `render.yaml` comment): the Render free instance sleeps after 15 min of inactivity. While asleep, the in-process APScheduler (`app/scheduler.py`) does not run, so strategies do not tick during market hours without an external keepalive (e.g. cron-job.org hitting `/api/health` every 10 min).
 
-## Env-var matrix
+## Docker Build Stages
 
-| Variable | Used in frontend? | Notes |
-|---|---|---|
-| `VITE_*` | No | ⚠️ none defined or referenced |
-| `.env.development/.production` | No | ⚠️ no frontend env files |
-| API base URL | Implicit | always relative `/api` |
-| WS URL | Implicit | from page origin |
+**Stage 1 — `frontend-builder` (`node:20-alpine`):**
+```
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build          # → /app/frontend/dist/
+```
 
-All real config (Alpaca keys, DB/Redis URLs, live-trading flags) is backend-only in `app/core/config.py`.
+**Stage 2 — `runtime` (`python:3.12-slim`):**
+```
+RUN pip install -r requirements.txt
+COPY app/ alembic/ alembic.ini scripts/ ./
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+EXPOSE 8000
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+```
 
-## Containerization & health
+Source: `Dockerfile`.
 
-| Concern | Finding | Source |
-|---|---|---|
-| Dockerfile | Single multi-stage (Node build → Python runtime); no separate frontend image | [Dockerfile](../../Dockerfile), [CLAUDE.md](../../CLAUDE.md) |
-| Kubernetes | N/A — not present; Render blueprint instead | [render.yaml](../../render.yaml) |
-| Health / smoke test | Backend `/api/health` (surfaced via store `health`); smoke = load `/` + `GET /api/health` | [api.js](../../frontend/src/lib/api.js#L58) |
-| Asset optimization | `React.lazy` per route + `manualChunks` vendor split + Suspense skeletons | [App.jsx](../../frontend/src/App.jsx#L10-L45), [vite.config.js](../../frontend/vite.config.js#L16-L22) |
+## Environment Variable Matrix
+
+| Variable | Dev default (`.env`) | Prod (Render) | Required | Purpose |
+|---|---|---|---|---|
+| `APP_ENV` | `development` | `production` | No | Application environment tag |
+| `LOG_LEVEL` | `INFO` | `INFO` | No | Log verbosity |
+| `SECRET_KEY` | (value in `.env`) | auto-generated by Render | Yes | JWT signing key |
+| `ADMIN_USERNAME` | `admin` | set in Render dashboard | Yes | Default admin username |
+| `ADMIN_PASSWORD` | `admin` | set in Render dashboard | Yes | Default admin password — change in prod |
+| `DATABASE_URL` | `postgresql+asyncpg://quantuser:changeme@localhost/quantdb` | from Render managed DB | Yes | Async SQLAlchemy connection |
+| `DATABASE_URL_SYNC` | `postgresql+psycopg2://quantuser:changeme@localhost/quantdb` | from Render managed DB | Yes | Sync connection for Alembic migrations |
+| `REDIS_URL` | `redis://localhost:6379/0` | Upstash URL (set in dashboard) | Yes | Cache + WebSocket pub/sub |
+| `ALPACA_API_KEY` | paper key (in `.env`) | set in Render dashboard | No | Alpaca brokerage API key |
+| `ALPACA_SECRET_KEY` | paper key (in `.env`) | set in Render dashboard | No | Alpaca brokerage secret |
+| `ALPACA_BASE_URL` | `https://paper-api.alpaca.markets` | `https://paper-api.alpaca.markets` | Yes | Paper vs live trading endpoint |
+| `ALPACA_DATA_URL` | `https://data.alpaca.markets` | `https://data.alpaca.markets` | Yes | Market data feed URL |
+| `ALPACA_LIVE_CONFIRMED` | `false` | `false` | No | Safety gate — must be `true` AND live URL set to enable live trading |
+| `TRADING_ENABLED` | `true` | `false` (flip after first deploy) | No | Master trading on/off switch |
+| `STRATEGIES_ENABLED` | `true` | `false` (flip after first deploy) | No | Strategy execution on/off switch |
+| `CORS_ORIGINS` | — | set in Render dashboard | No | Allowed CORS origins (e.g. `https://lodestar-api.onrender.com`) |
+| `PORT` | `8000` | set by Render | Yes | uvicorn listen port |
+| `MAX_DRAWDOWN_PCT` | `5.0` | — | No | Risk limit: max drawdown from peak before halt |
+| `MAX_DAILY_LOSS_PCT` | `2.0` | — | No | Risk limit: max daily loss |
+| `MAX_POSITION_SIZE_PCT` | `10.0` | — | No | Risk limit: max single position as % of equity |
+| `MAX_OPEN_POSITIONS` | `10` | — | No | Risk limit: max simultaneous open positions |
+| `MAX_ORDERS_PER_MINUTE` | `10` | — | No | Rate limit: runaway-algorithm guard |
+| `BACKTEST_DEFAULT_CAPITAL` | `100000.0` | — | No | Default starting capital for backtests |
+| `BACKTEST_COMMISSION_PER_TRADE` | `0.0` | — | No | Simulated commission per backtest trade |
+| `BACKTEST_SLIPPAGE_BPS` | `2.0` | — | No | Simulated slippage in basis points |
+
+## Health Check
+
+`GET /api/health` — configured as Render's `healthCheckPath` (`render.yaml:10`). Also polled by `initStoreWS()` on boot and by the 30 s store refresh interval.
+
+## CI/CD
+
+Render `autoDeploy: true` on branch `main` (`render.yaml:16`). No GitHub Actions, GitLab CI, or other CI pipeline found in the repository.
+
+## Kubernetes / Docker Compose
+
+No Kubernetes manifests or `docker-compose.yml` found. Deployment target is Render only.

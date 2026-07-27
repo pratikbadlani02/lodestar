@@ -1,91 +1,127 @@
-# 06 — Runtime Flows
+# Runtime Flows
 
-## Page lifecycle
+> Project: lodestar
+> Type: react-app
+> Skill: react-frontend-analysis
 
-| Phase | Behavior | Source |
-|---|---|---|
-| Route match | `<Suspense>` shows `RouteFallback` skeleton while lazy chunk loads | [App.jsx](../../frontend/src/App.jsx#L59-L84) |
-| Mount | Page reads context (`useSymbol`/`useMarket`) and/or store selectors | various |
-| Data | Live pages subscribe to store; market pages fire `api.*` in `useEffect` → local state | [store.js](../../frontend/src/lib/store.js), `src/pages/*` |
-| Error | Render exceptions bubble to `ErrorBoundary` around `<Outlet/>` | [Layout.jsx](../../frontend/src/components/Layout.jsx#L360-L362) |
+## Page Lifecycle
 
-Mutations are **non-optimistic** — UI reflects state only after server confirmation / WS reload ([store.js](../../frontend/src/lib/store.js#L133-L142)).
+**Authenticated user navigating to a private page (e.g. `/workspace`):**
 
-## Happy-path sequence — login → workspace
+1. User loads app or clicks a nav link.
+2. React Router evaluates the route; the `Private` wrapper renders `RequireAuth`.
+3. `RequireAuth` reads `sessionStorage.quant_token` — token present, so it renders children.
+4. `Layout` has already booted (it checks auth on every navigation and calls `initStoreWS()` — idempotent via `bootstrapped` flag).
+5. `initStoreWS()` fires six parallel REST fetches (`loadControl`, `loadHealth`, `loadAccount`, `loadPositions`, `loadOrders`, `loadAlerts`) and opens the WebSocket.
+6. The page chunk (`Workspace.jsx`) is lazy-loaded; `<Suspense>` shows `RouteFallback` (skeleton rows) until the chunk and its initial data are ready.
+7. The page component mounts and calls `useStore(selectXxx)` for the slices it needs. Zustand notifies only the subscribers of those specific selectors.
+8. The WebSocket starts delivering server events; each event type calls the relevant `loadXxx()` loader, which re-fetches from REST and updates the store. The page re-renders with fresh data.
+9. A 30 s `setInterval` backstop re-fetches all slices even if no WS event arrives (`store.js:161-170`).
 
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant L as Login.jsx
-  participant API as api.js
-  participant BE as FastAPI
-  participant ST as Zustand store
-  participant WS as WebSocket
-  U->>L: submit credentials
-  L->>API: api.login(u,p)
-  API->>BE: POST /auth/login
-  BE-->>API: { access_token }
-  API->>API: setToken() → sessionStorage
-  L->>U: navigate(from || /workspace)
-  Note over ST: Layout effect authed=true → initStoreWS()
-  ST->>BE: parallel load control/health/account/positions/orders/alerts
-  BE-->>ST: payloads → set(...)
-  ST->>WS: connectWebSocket()
-  WS-->>ST: open → wsConnected=true
-  ST-->>U: Workspace renders live state
-```
+**Anonymous user navigating to a public page (e.g. `/stocks`):**
 
-## Error/recovery sequence — 401 & render crash
+1. No token in sessionStorage — `initStoreWS()` is **not** called.
+2. Layout renders with `authed = false`; auth-only sidebar items show a lock icon; `WatchRail` and `OrderSlideOver` are hidden.
+3. The page mounts and fetches directly from REST (no Zustand store involvement for public market data).
+
+## Happy-Path Sequence: Authenticated Session
 
 ```mermaid
 sequenceDiagram
-  participant UI as Page
-  participant API as api.request()
-  participant BE as FastAPI
-  participant EB as ErrorBoundary
-  UI->>API: api.getPositions()
-  API->>BE: GET /positions (expired token)
-  BE-->>API: 401
-  alt token present
-    API->>API: setToken(null) → location=/login?from=
-  else anonymous
-    API-->>UI: throw err(status=401)
-  end
-  Note over UI,EB: separately, a render exception…
-  UI->>EB: throws during render
-  EB-->>UI: fallback card + Retry / Workspace
+    participant Browser
+    participant main.jsx
+    participant Layout
+    participant Store as Zustand Store
+    participant API as FastAPI /api
+    participant WS as WebSocket /api/ws
+
+    Browser->>main.jsx: load app (quant_token in sessionStorage)
+    main.jsx->>Store: initStoreWS()
+    Store->>API: GET /control/state, /health, /account, /positions, /orders, /alerts (parallel)
+    API-->>Store: responses → update slices
+    Store->>WS: connectWebSocket()
+    WS-->>Store: ws open
+
+    Browser->>Layout: navigate to /workspace
+    Layout->>Store: useStore(selectXxx) — subscribe to slices
+    Store-->>Layout: current state
+    Layout-->>Browser: render page with data
+
+    WS-->>Store: { type: "order_update" }
+    Store->>API: GET /orders, /positions, /account (re-fetch)
+    API-->>Store: updated data
+    Store-->>Layout: notify subscribers
+    Layout-->>Browser: re-render with fresh data
 ```
 
-Sources: [api.js](../../frontend/src/lib/api.js#L28-L40), [ErrorBoundary.jsx](../../frontend/src/components/ErrorBoundary.jsx).
+## Error / Recovery Sequence
 
-## Main data flow — live trading state
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Page as Page Component
+    participant EB as ErrorBoundary
+    participant API as FastAPI /api
+    participant WS as WebSocket /api/ws
+
+    Browser->>Page: render page chunk
+    Page->>API: fetch data (REST)
+    API-->>Page: HTTP 401 (session expired, token was set)
+    Page->>Browser: api.js clears token, hard-redirects to /login?from=/workspace
+
+    Browser->>Page: (new session) render page
+    Page->>Page: throw render error (JS exception)
+    Page->>EB: componentDidCatch(err, info)
+    EB->>Browser: render "Something broke" card (retry + home buttons)
+    Browser->>EB: user clicks Retry
+    EB->>EB: setState({ err: null }) → re-render children
+    EB->>Page: page re-mounts
+
+    WS-->>WS: connection closed
+    WS->>WS: setTimeout 5s → connectWebSocket() (auto-reconnect)
+    WS-->>Store: ws open → _setWs(true)
+```
+
+## Main End-to-End Data Flow
 
 ```mermaid
 flowchart TD
-  subgraph Ingress
-    Boot["initStoreWS() initial load + 30s poll"]
-    WSmsg["WebSocket messages"]
-    MktEv["market:change event"]
-  end
-  Boot --> Loaders
-  WSmsg --> Router["_onWsMessage(type→reload)"] --> Loaders
-  MktEv --> Loaders["store loaders (coalesced)"]
-  Loaders -->|fetch /api/*| BE[FastAPI]
-  BE --> SET["set({...slice})"] --> Store[(Zustand store)]
-  Store -->|selectors| Pages["Workspace / Orders / Positions / Alerts / Strategies / Backtests"]
+    Browser["Browser"]
+
+    subgraph frontend["Frontend (React SPA)"]
+        Ctx["Context Providers\n(Theme/Density/Market/Symbol)"]
+        Store["Zustand Store\n(global trading state)"]
+        API_JS["lib/api.js\n(fetch wrapper)"]
+        WS_JS["lib/api.js:connectWebSocket\n(WS client)"]
+        Pages["Page Components\n(40+ lazy chunks)"]
+    end
+
+    subgraph backend["Backend (FastAPI)"]
+        REST["REST /api/*"]
+        WSEndpoint["/api/ws"]
+        DB["PostgreSQL"]
+        Redis["Redis\n(pub/sub + cache)"]
+        Alpaca["Alpaca API"]
+    end
+
+    Browser -- navigate --> Pages
+    Pages -- useStore(selector) --> Store
+    Pages -- direct REST calls --> API_JS
+    Store -- loadXxx() --> API_JS
+    API_JS -- fetch /api/* --> REST
+    REST -- query/write --> DB
+    REST -- publish events --> Redis
+    Redis -- push events --> WSEndpoint
+    WSEndpoint -- JSON message --> WS_JS
+    WS_JS -- _onWsMessage(msg) --> Store
+    Store -- setState → notify selectors --> Pages
+    REST -- market/trading calls --> Alpaca
+    Alpaca -- quote/order data --> REST
+    Ctx -- setMarket() dispatches market:change --> Store
 ```
 
-WS messages invalidate/reload; REST stays canonical ([store.js](../../frontend/src/lib/store.js#L107-L147)).
+## Mutation Flow
 
-## Routing / transform — request construction
+All mutations (place order, create strategy, run backtest, etc.) are fire-and-wait: the page calls `api.submitOrder()` (or equivalent), waits for the REST response, then the WS delivers a `order_update` / `backtest_completed` event that invalidates the relevant store slice. There is **no optimistic update** pattern — the UI does not update before server confirmation.
 
-```mermaid
-flowchart LR
-  Caller["api.screenStocks(params, market)"] --> Build["URLSearchParams: drop ''/undefined"]
-  Build --> Mkt["mkt(market): arg ?? localStorage ?? 'us'"]
-  Mkt --> Path["GET /market/screener?...&market="]
-  Path --> Req["request('GET', path)"]
-  Req --> Hdr["inject Bearer if present"] --> Fetch["fetch('/api'+path)"]
-```
-
-Source: [api.js](../../frontend/src/lib/api.js#L9-L13).
+The one exception is toast notifications on `backtest_completed`: the WS message includes `return_pct` and `trades`, which are shown immediately in a success toast (`store.js:124-128`) alongside the store re-fetch.

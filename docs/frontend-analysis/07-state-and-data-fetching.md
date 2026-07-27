@@ -1,40 +1,50 @@
-# 07 — State and Data Fetching
+# State and Data Fetching
 
-## Fetching pattern
+> Project: lodestar
+> Type: react-app
+> Skill: react-frontend-analysis
 
-| Aspect | Finding | Source |
+## Fetching Library / Pattern
+
+No React data-fetching library (no React Query, SWR, Apollo, etc.). All fetching is done via a hand-rolled `fetch` wrapper in `lib/api.js:request()`. The wrapper:
+
+- Injects `Authorization: Bearer <token>` when a token exists
+- Handles 401 by clearing the token and redirecting to `/login`
+- Extracts error detail from JSON or text on non-ok responses
+- Returns `null` on 204 responses
+
+Store loaders (`loadControl`, `loadOrders`, etc.) call `api.*` methods via a **coalescing pattern** (`lib/store.js:22-29`): an in-flight `Map` keyed by a logical name prevents duplicate concurrent fetches. If a second call arrives while the first is in-flight, it receives the same `Promise` rather than issuing a new request.
+
+## Cache and Invalidation Strategy
+
+| Mechanism | How it works | Source |
 |---|---|---|
-| Library | ⚠️ None (no TanStack Query / SWR) — hand-rolled `fetch` wrapper | [api.js](../../frontend/src/lib/api.js#L16-L46) |
-| Live-trading state | Centralized in Zustand store; loaders hit REST once + on invalidation | [store.js](../../frontend/src/lib/store.js) |
-| Market-data reads | Page-local `useEffect` → `api.*` → `useState`; not cached/shared | `src/pages/*` |
-| Request dedup | `coalesce(key, fn)` in-flight map shares concurrent identical loads | [store.js](../../frontend/src/lib/store.js#L22-L30) |
+| WS-driven invalidation | WS message received → specific `loadXxx()` called → REST re-fetch → store updated | `store.js:99-137` |
+| 30 s safety refresh | `setInterval` backstop re-fetches all slices even if no WS event | `store.js:161-170` |
+| In-flight coalescing | Concurrent calls to the same loader share the same `Promise`; no duplicate requests | `store.js:22-29` |
+| No TTL / stale-while-revalidate | Data is considered fresh immediately after any fetch; no client-side expiry | — |
+| No localStorage caching | Store state is in-memory only; refreshing the page re-fetches everything | — |
 
-## Cache & invalidation strategy
+Pages that fetch data outside the store (most public market-data pages) call `api.*` directly in `useEffect` hooks with no caching layer — each mount triggers a fresh fetch.
 
-| Concern | Behavior | Source |
-|---|---|---|
-| Cache store | No stale-time/TTL cache; store holds latest snapshot only | [store.js](../../frontend/src/lib/store.js) |
-| Invalidation trigger | WS message → targeted `loadX()` reload (server authoritative) | [store.js](../../frontend/src/lib/store.js#L107-L147) |
-| Safety refresh | 30s interval re-pulls all live slices (backstop for dropped WS) | [store.js](../../frontend/src/lib/store.js#L173-L182) |
-| Market re-scope | `market:change` event re-pulls account + positions | [store.js](../../frontend/src/lib/store.js#L186-L191) |
-| Loaded flags | `*Loaded` booleans distinguish loading vs loaded-empty | [store.js](../../frontend/src/lib/store.js#L60-L66) |
+## Real-Time Events
 
-## Real-time events
-
-Canonical home; referenced by [03-access-and-rules.md](03-access-and-rules.md) and [06-runtime-flows.md](06-runtime-flows.md). Channel: single WebSocket `/api/ws` ([api.js](../../frontend/src/lib/api.js#L195-L218)).
+All events arrive on a single WebSocket at `ws(s)://<host>/api/ws`. The client reconnects after 5 s on close (`api.js:189-191`) and sends a keepalive `ping` every 30 s (`api.js:193-196`).
 
 | Channel | Event / message type | Effect on state | Source |
 |---|---|---|---|
-| WS `/api/ws` | `order_update` | reload orders + positions + account | [store.js](../../frontend/src/lib/store.js#L110-L114) |
-| WS | `position_closed` | reload positions + account | [store.js](../../frontend/src/lib/store.js#L115-L118) |
-| WS | `alert`, `price_alert_triggered` | reload alerts | [store.js](../../frontend/src/lib/store.js#L119-L122) |
-| WS | `control_update` | reload control | [store.js](../../frontend/src/lib/store.js#L123-L125) |
-| WS | `strategy_update`, `strategy_signal` | reload strategies | [store.js](../../frontend/src/lib/store.js#L126-L129) |
-| WS | `backtest_completed` | reload backtests + success toast (return%/trades) | [store.js](../../frontend/src/lib/store.js#L130-L139) |
-| WS | `trade` | handled directly by Workspace/Tape (live tape) | [store.js](../../frontend/src/lib/store.js#L140-L142) |
+| `/api/ws` | `order_update` | `loadOrders()`, `loadPositions()`, `loadAccount()` re-fetched | `store.js:101-106` |
+| `/api/ws` | `position_closed` | `loadPositions()`, `loadAccount()` re-fetched | `store.js:107-110` |
+| `/api/ws` | `alert` | `loadAlerts()` re-fetched | `store.js:111-113` |
+| `/api/ws` | `price_alert_triggered` | `loadAlerts()` re-fetched | `store.js:111-113` |
+| `/api/ws` | `control_update` | `loadControl()` re-fetched | `store.js:114-116` |
+| `/api/ws` | `strategy_update` | `loadStrategies()` re-fetched | `store.js:117-120` |
+| `/api/ws` | `strategy_signal` | `loadStrategies()` re-fetched | `store.js:117-120` |
+| `/api/ws` | `backtest_completed` | `loadBacktests()` re-fetched + `toast.success` shown with `return_pct` and `trades` | `store.js:121-128` |
+| `/api/ws` | `trade` | No store update — handled directly by `Tape` page and `Workspace` ticker via their own WS listener ⚠️ UNVERIFIED | `store.js:130-132` |
 
-Connection resilience: 5s auto-reconnect on close, 30s keepalive ping, malformed messages ignored ([api.js](../../frontend/src/lib/api.js#L205-L216)).
+The `market:change` custom DOM event (`MarketContext.jsx:47`) also drives partial re-fetches: the store listens for `window.dispatchEvent(new CustomEvent('market:change'))` and calls `loadAccount()` + `loadPositions()` for the new market scope (`store.js:173-177`).
 
-## Optimistic updates
+## Optimistic Updates
 
-N/A — none. Mutations wait for server confirmation; long-running work (orders, backtests) finalizes via WS-driven store reloads ([store.js](../../frontend/src/lib/store.js#L133-L142)).
+N/A — no optimistic update behavior. All mutations wait for server confirmation, then the WS event triggers the re-fetch that updates the UI.

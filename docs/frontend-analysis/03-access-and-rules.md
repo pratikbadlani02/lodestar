@@ -1,40 +1,43 @@
-# 03 — Access and Rules
+# Access and Rules
 
-## Access & rules
+> Project: lodestar
+> Type: react-app
+> Skill: react-frontend-analysis
 
-| Rule | Behavior | Enforced where (file) | Scope |
+## Auth / AuthZ Scheme
+
+Authentication is a JWT Bearer-token flow. The user posts credentials to `/api/auth/login` (form-encoded); the backend returns an `access_token`. The token is stored in **`sessionStorage`** under key `quant_token` (tab-scoped — not shared across tabs, not persisted across browser restarts). Every subsequent API request includes `Authorization: Bearer <token>` (`lib/api.js:17-18`).
+
+There is no role-based authorization in the frontend. The backend enforces admin-only endpoints; the frontend exposes the Users admin page at `/users` but does not check role before rendering it — access control for that page is backend-enforced.
+
+## Access Rules
+
+| Rule | Behavior | Enforced where (file) | Scope (route/feature) |
 |---|---|---|---|
-| Token storage | JWT in `sessionStorage.quant_token` (clears on tab close) | [api.js](../../frontend/src/lib/api.js#L4) | Global |
-| Route guard | Token-less users redirected to `/login?from=` | [App.jsx](../../frontend/src/App.jsx#L47-L57) | Private routes |
-| Session expiry | `401` with token ⇒ clear token + redirect; `401` anonymous ⇒ throw | [api.js](../../frontend/src/lib/api.js#L28-L40) | All requests |
-| Open-redirect guard | `from` honored only if starts `/` and not `//` | [Login.jsx](../../frontend/src/pages/Login.jsx#L21-L24) | Login |
-| Public market data | Market/research/learn render without sign-in | [App.jsx](../../frontend/src/App.jsx#L92-L125) | Public routes |
-| Gated trading | Trading/account/strategy/risk/admin require login | [App.jsx](../../frontend/src/App.jsx#L127-L150) | Private routes |
-| Private nav tagging | `priv:true` items marked visually for anonymous users | [Layout.jsx](../../frontend/src/components/Layout.jsx#L31-L80) | Sidebar |
-| Market scope | `us`/`in` selector persisted; drives symbol universe + currency | [MarketContext.jsx](../../frontend/src/lib/MarketContext.jsx#L13-L54) | Global |
-| Backend-authoritative market | Real market derived from symbol suffix (`.NS`/`.BO`⇒IN); selector is front-of-house | [MarketContext.jsx](../../frontend/src/lib/MarketContext.jsx#L80-L88) | Global |
-| Active symbol | App-wide ticker, uppercased/trimmed, recents max 12 | [SymbolContext.jsx](../../frontend/src/lib/SymbolContext.jsx#L11-L52) | Symbol pages |
-| Live-trading surfacing | UI reflects `control.is_live/trading_enabled/strategies_enabled` | [Layout.jsx](../../frontend/src/components/Layout.jsx#L177-L181) | Chrome |
+| Public market data | All market/research/screener/education routes accessible without token | `App.jsx` route tree (no `Private` wrapper) | All public routes |
+| Private trading routes | Render `<Navigate to="/login?from=...">` if no token in sessionStorage | `App.jsx:RequireAuth` (line 48-57) | `/workspace`, `/trade`, `/paper`, `/orders`, `/positions`, `/watchlists`, `/strategies`, `/backtests*`, `/optimizer*`, `/risk`, `/alerts`, `/price-alerts`, `/audit`, `/settings`, `/users` |
+| Session expiry (401 with token) | Clear token + hard redirect to `/login?from=<current>` | `lib/api.js:28-35` | All authenticated REST calls |
+| Anonymous 401 | Throw `unauthorized` error; page handles it | `lib/api.js:36` | REST calls made without a token that hit a protected endpoint |
+| Open-redirect protection | `from` param honored only if it starts with `/` and not `//` | `pages/Login.jsx:22` | Post-login redirect |
+| WebSocket gating | `initStoreWS()` called only when `quant_token` is present | `main.jsx:14`, `components/Layout.jsx:117` | WebSocket connection |
+| Market scope | Account and position API calls include `?market=<market>` derived from `quant_market_v1` in localStorage | `lib/store.js:18-19`, `lib/api.js:mkt()` | `/account`, `/positions`, watchlists |
+| Live trading safety gate | Requires both `ALPACA_BASE_URL` = live URL **and** `ALPACA_LIVE_CONFIRMED=true` | `app/core/config.py` (backend — not frontend) | Alpaca order submission |
+| Trading halted banner | `Layout` renders a warning banner when `control.is_live && !control.trading_enabled` | `components/Layout.jsx:352-357` | Layout chrome (all authenticated views) |
 
-## Auth / authz scheme
+## Scoping / Multi-Tenancy
 
-| Aspect | Value | Source |
-|---|---|---|
-| Scheme | JWT bearer in `sessionStorage` | [api.js](../../frontend/src/lib/api.js#L4-L7) |
-| Login | `POST /auth/login` (form-encoded) → `{ access_token }` | [api.js](../../frontend/src/lib/api.js#L49-L55) |
-| Header | `Authorization: Bearer <token>` on every request | [api.js](../../frontend/src/lib/api.js#L17-L19) |
-| Admin surfaces | `/users` tagged Admin in UI; ⚠️ role enforcement is backend-side | [Layout.jsx](../../frontend/src/components/Layout.jsx#L75-L78) |
+The app supports two market scopes: **US** and **India (NSE)**. The active market is stored in `localStorage` as `quant_market_v1` and read by `MarketContext`, `lib/api.js:mkt()`, and `lib/store.js:currentMarket()`. Switching market fires a `market:change` custom event that triggers the store to re-fetch account and positions for the new scope (`store.js:173-177`). MarketContext syncs across tabs via the `storage` event.
 
-## Scoping / multi-tenant
+## Validation Approach
 
-Not multi-tenant. The only scoping axis is **market (US/IN)**, persisted in `localStorage.quant_market_v1`, applied to US-only feeds via the `mkt()` helper; switching dispatches a `market:change` event that re-pulls account/positions. Source: [api.js](../../frontend/src/lib/api.js#L9-L13), [MarketContext.jsx](../../frontend/src/lib/MarketContext.jsx#L45-L54), [store.js](../../frontend/src/lib/store.js#L186-L191).
+- **Login form:** HTML native `required` attribute on username and password inputs (`pages/Login.jsx:62,70`). No additional client-side validation.
+- **No form validation library** detected (`package.json` has no Zod, Yup, react-hook-form, etc.).
+- API validation errors from the backend are surfaced via `err.detail.reason`, `err.detail.detail`, or `err.message` extracted in `lib/api.js:39-41` and passed to callers, who may show them in toasts.
 
-## Validation & feature flags
+## Feature Flags
 
-| Concern | Finding | Source |
-|---|---|---|
-| Form validation | Native `required` + server-side errors; ⚠️ no Zod/Yup | [Login.jsx](../../frontend/src/pages/Login.jsx#L60-L82) |
-| Feature flags | N/A — no build-time flag system; runtime toggles are backend control flags | ⚠️ inferred |
-| Cross-tab sync | theme/market/symbol/auth sync via `storage` event | [ThemeContext.jsx](../../frontend/src/lib/ThemeContext.jsx#L40-L50), [Layout.jsx](../../frontend/src/components/Layout.jsx#L127-L135) |
+N/A — no client-side feature-flag system (no LaunchDarkly, Unleash, or similar). Runtime behavior is controlled by backend environment variables (`TRADING_ENABLED`, `STRATEGIES_ENABLED`) that are reflected in the `control` Zustand slice returned from `/api/control/state`.
 
-> Real-time invalidation rules are documented in [07-state-and-data-fetching.md](07-state-and-data-fetching.md).
+## Real-Time Invalidation Rules
+
+Real-time state invalidation is driven by the WebSocket. See `07-state-and-data-fetching.md` for the full event → state mapping.
