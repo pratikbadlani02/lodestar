@@ -1,107 +1,107 @@
-# Architecture
-
-> Project: lodestar
-> Type: react-app
-> Skill: react-frontend-analysis
-
-Lodestar is a quantitative trading platform — a single-page React dashboard that covers market data browsing (public) and live/paper trading, strategy management, and backtesting (authenticated). The frontend is a JavaScript (not TypeScript) Vite SPA that communicates with a FastAPI backend over REST + a single persistent WebSocket.
+# 01 — Architecture
 
 ## Stack
 
 | Concern | Value | Source |
 |---|---|---|
-| Framework | React 18.3 | `frontend/package.json` |
-| Language | JavaScript (JSX) — no TypeScript | `frontend/src/*.jsx` |
-| Build tool | Vite 5.3 | `frontend/package.json` |
-| Router | React Router DOM 6.26 | `frontend/package.json` |
-| State management | Zustand 5.0 (single store) | `frontend/package.json` |
-| HTTP client | Native `fetch` via custom wrapper | `frontend/src/lib/api.js` |
-| Real-time | Native WebSocket (`/api/ws`) | `frontend/src/lib/api.js:181` |
-| Styling | Tailwind CSS 3.4 + PostCSS + CSS variables | `frontend/package.json`, `frontend/tailwind.config.js` |
-| Charts | Recharts 2.12, lightweight-charts 5.2 | `frontend/package.json` |
-| Icons | Lucide React 0.400 | `frontend/package.json` |
-| Toasts | Sonner 2.0 (wrapped in `lib/toast.js`) | `frontend/package.json` |
-| Fonts | Inter, JetBrains Mono, Sora (Google Fonts CDN) | `frontend/index.html:22` |
+| Framework | React 18.3.0 | `frontend/package.json:14` |
+| Language | JavaScript (ES modules, `.jsx`) | `frontend/package.json:5` |
+| Build tool | Vite 5.3.0 | `frontend/package.json:26` |
+| Router | React Router DOM 6.26.0 | `frontend/package.json:16` |
+| Global state | Zustand 5.0.13 | `frontend/package.json:19` |
+| Local/UI state | React Context (4 providers) | `frontend/src/main.jsx:6-9` |
+| Styling | Tailwind CSS 3.4.19 + CSS custom properties | `frontend/package.json:25`, `frontend/src/index.css` |
+| Charts (OHLCV) | Lightweight Charts 5.2.0 | `frontend/package.json:12` |
+| Charts (analytics) | Recharts 2.12.0 | `frontend/package.json:17` |
+| Icons | Lucide React 0.400.0 | `frontend/package.json:13` |
+| Toasts | Sonner 2.0.7 | `frontend/package.json:18` |
+| HTTP client | Native `fetch` (no axios) | `frontend/src/lib/api.js:26` |
+| Real-time | Native `WebSocket` with auto-reconnect | `frontend/src/lib/api.js:182` |
+| PostCSS | Autoprefixer 10.5.0 | `frontend/package.json:22` |
 
-## Build Config
+## Build Configuration
 
 | Setting | Value | Source |
 |---|---|---|
-| Dev port | 3000 | `frontend/vite.config.js:8` |
+| Dev server port | 3000 | `frontend/vite.config.js:7` |
 | API proxy | `/api` → `http://localhost:8000` | `frontend/vite.config.js:9` |
-| Build output | `frontend/dist/` | `frontend/vite.config.js:14` |
-| Sourcemaps | `false` | `frontend/vite.config.js:15` |
-| Manual chunks | `vendor-react`, `vendor-charts`, `vendor-lwcharts`, `vendor-icons` | `frontend/vite.config.js:17-23` |
-| Base path | `/` (Vite default — not explicitly set) | `frontend/vite.config.js` |
-| TS config | None — JS project | — |
-| Env prefix | None set (Vite default `VITE_`) — no VITE_ vars in use | — |
+| Output directory | `dist` | `frontend/vite.config.js:13` |
+| Source maps (prod) | Disabled | `frontend/vite.config.js:14` |
+| Manual chunk: `vendor-react` | `react`, `react-dom`, `react-router-dom` | `frontend/vite.config.js:18` |
+| Manual chunk: `vendor-charts` | `recharts` | `frontend/vite.config.js:19` |
+| Manual chunk: `vendor-lwcharts` | `lightweight-charts` | `frontend/vite.config.js:20` |
+| Manual chunk: `vendor-icons` | `lucide-react` | `frontend/vite.config.js:21` |
+| Route chunks | One chunk per lazy page (27 routes) | `frontend/src/App.jsx:10-44` |
+| Env prefix | None — env vars accessed via Vite default | `frontend/vite.config.js` |
+| Base path | `/` (default) | `frontend/vite.config.js` |
 
-## State and Data Layer Summary
+## State & Data-Layer Summary
 
-All global trading state lives in a single Zustand store (`lib/store.js`). There is no query library (no React Query or SWR); all fetching is done through a hand-rolled `fetch` wrapper in `lib/api.js`. The WebSocket drives invalidation — on every WS event the store re-fetches the relevant REST slice rather than applying the message directly (server is authoritative). Four React contexts handle pure UI preferences (theme, density, active market, active symbol) and are kept out of the Zustand store because they don't depend on server data.
+There are two tiers of state:
 
-## Component Architecture
+**Zustand store** (`frontend/src/lib/store.js`) is the single source of truth for live trading data: control flags, health, account, positions, orders, alerts, strategies, backtests, and WebSocket connection state. Loaders are idempotent and coalesce concurrent calls. The WS message router triggers REST invalidations rather than writing server data directly into state.
+
+**React Context** provides four ambient, non-trading concerns:
+- `ThemeContext` — dark/light toggle, persisted to `localStorage.quant_theme_v1`
+- `DensityContext` — compact/cozy/comfortable row density, `localStorage.quant_density_v1`
+- `MarketContext` — US/India market selector, `localStorage.quant_market_v1`
+- `SymbolContext` — active symbol + recents (max 12), `localStorage.quant_active_symbol_v1`
+
+## Diagrams
+
+### Component Architecture
 
 ```mermaid
 graph TD
-    main["main.jsx — entry point\n(BrowserRouter + 4 providers)"]
-
-    subgraph providers["Context Providers (main.jsx)"]
-        ThemeProv["ThemeProvider"]
-        DensityProv["DensityProvider"]
-        MarketProv["MarketProvider"]
-        SymbolProv["SymbolProvider"]
+    subgraph Providers["Provider Tree (main.jsx)"]
+        BrowserRouter --> ThemeProvider
+        ThemeProvider --> DensityProvider
+        DensityProvider --> MarketProvider
+        MarketProvider --> SymbolProvider
+        SymbolProvider --> App
     end
 
-    App["App.jsx — route tree"]
-
-    subgraph layout["Layout (/ shell — unauthenticated)"]
-        Sidebar["Sidebar nav\n(NAV_GROUPS, collapsible)"]
-        WatchRail["WatchRail\n(auth only)"]
-        TopBar["TopBar\n(search, market selector)"]
-        Ticker["Ticker\n(live price strip)"]
-        EB["ErrorBoundary\n(route-level)"]
-        Outlet["<Outlet />\n(active page)"]
-        StatusBar["StatusBar"]
-        OrderSO["OrderSlideOver\n(auth only)"]
-        CmdPal["CommandPalette"]
-        Toaster["Toaster (sonner)"]
+    subgraph Shell["App Shell (Layout.jsx)"]
+        App --> Layout
+        Layout --> Sidebar
+        Layout --> TopBar
+        Layout --> Outlet["&lt;Outlet&gt; (pages)"]
+        Layout --> StatusBar
+        Layout --> CommandPalette
+        Layout --> OrderSlideOver
     end
 
-    Login["Login\n(eager — /login)"]
-    Pages["40+ lazy page chunks\n(each in its own JS bundle)"]
+    subgraph State["State Layer"]
+        ZustandStore["Zustand Store (store.js)"]
+        ZustandStore --> |"selectControl/Account/Orders…"| Pages
+    end
 
-    main --> providers
-    providers --> App
-    App --> Login
-    App --> layout
-    EB --> Outlet
-    Outlet --> Pages
+    subgraph Data["Data Layer"]
+        APIClient["api.js (fetch)"]
+        WS["WebSocket /api/ws"]
+        WS --> |"WS messages"| ZustandStore
+        ZustandStore --> |"loaders"| APIClient
+        Pages --> |"direct calls"| APIClient
+    end
 ```
 
-## System Context
+### System Context
 
 ```mermaid
 graph LR
-    Browser["Browser (user)"]
+    User["Browser / User"]
+    SPA["React SPA\n(Vite · port 3000 dev\n/ dist in prod)"]
+    FastAPI["FastAPI Backend\n(:8000 / /api)"]
+    Alpaca["Alpaca Brokerage\n(paper or live)"]
+    YFinance["yfinance\n(market data)"]
+    Redis["Redis\n(WS pub/sub · kill switch)"]
+    Postgres["PostgreSQL\n(orders, strategies, audit…)"]
 
-    subgraph prod["Production container (Docker)"]
-        Uvicorn["uvicorn / FastAPI\n(app.main:app)"]
-        StaticFiles["Static files\nfrontend/dist/"]
-    end
-
-    subgraph external["External services"]
-        Postgres["PostgreSQL 16\n(Render managed)"]
-        Redis["Redis\n(Upstash)"]
-        Alpaca["Alpaca API\npaper-api.alpaca.markets\ndata.alpaca.markets"]
-        GoogleFonts["Google Fonts CDN"]
-    end
-
-    Browser -- "GET /  →  index.html" --> StaticFiles
-    Browser -- "REST /api/*" --> Uvicorn
-    Browser -- "WS /api/ws" --> Uvicorn
-    Browser -- "Fonts" --> GoogleFonts
-    Uvicorn --> Postgres
-    Uvicorn --> Redis
-    Uvicorn --> Alpaca
+    User -->|"HTTP/S"| SPA
+    SPA -->|"REST /api/*"| FastAPI
+    SPA -->|"WebSocket /api/ws"| FastAPI
+    FastAPI -->|"trade orders"| Alpaca
+    FastAPI -->|"OHLCV, fundamentals"| YFinance
+    FastAPI -->|"control state · pub/sub"| Redis
+    FastAPI -->|"persistence"| Postgres
 ```

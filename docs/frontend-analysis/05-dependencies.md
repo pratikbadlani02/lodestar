@@ -1,55 +1,48 @@
-# Dependencies
+# 05 — Dependencies
 
-> Project: lodestar
-> Type: react-app
-> Skill: react-frontend-analysis
-
-## Runtime Dependencies
+## Dependencies
 
 | Package | Version | Role | Notes |
 |---|---|---|---|
-| `react` | ^18.3.0 | UI framework | Concurrent mode; used with `React.lazy` + `Suspense` throughout |
-| `react-dom` | ^18.3.0 | DOM renderer | `createRoot` API in `main.jsx` |
-| `react-router-dom` | ^6.26.0 | Client-side routing | `BrowserRouter`, `Routes`, `Route`, `Navigate`, `Outlet`, `NavLink`, `useNavigate`, `useLocation`, `useSearchParams` |
-| `zustand` | ^5.0.13 | Global state management | Single store; no middleware (no immer, no devtools, no persist) |
-| `recharts` | ^2.12.0 | Declarative charts (most pages) | `LineChart`, `BarChart`, `AreaChart`, `ComposedChart`, etc. |
-| `lightweight-charts` | ^5.2.0 | TradingView-style candlestick/time-series charts | Used in `ChartWidget.jsx` for OHLCV |
-| `lucide-react` | ^0.400.0 | SVG icon library | Used in every component |
-| `sonner` | ^2.0.7 | Toast notifications | Wrapped in `lib/toast.js`; `Toaster` mounted in `Layout.jsx` |
+| `react` | ^18.3.0 | UI framework | Concurrent mode features used (Suspense, lazy) |
+| `react-dom` | ^18.3.0 | DOM renderer | — |
+| `react-router-dom` | ^6.26.0 | Client-side routing | `<BrowserRouter>`, `<Routes>`, `<Route>`, `useLocation`, `Navigate` |
+| `zustand` | ^5.0.13 | Global state management | Single store; selector pattern |
+| `recharts` | ^2.12.0 | Analytics charts | AreaChart, LineChart, BarChart in analytics/equity pages |
+| `lightweight-charts` | ^5.2.0 | OHLCV candlestick charts | Used in ChartWidget; separate vendor chunk |
+| `lucide-react` | ^0.400.0 | Icon set | Used across all components; separate vendor chunk |
+| `sonner` | ^2.0.7 | Toast notifications | Wrapped by `frontend/src/lib/toast.js` |
+| `@vitejs/plugin-react` | ^4.3.0 | Vite React transform | Babel-based fast refresh |
+| `vite` | ^5.3.0 | Build tool / dev server | Manual chunking, proxy config |
+| `tailwindcss` | ^3.4.19 | Utility CSS framework | Custom design system with CSS variables |
+| `postcss` | ^8.5.15 | CSS processing | Required by Tailwind pipeline |
+| `autoprefixer` | ^10.5.0 | CSS vendor prefixes | PostCSS plugin |
 
-## Dev Dependencies
-
-| Package | Version | Role | Notes |
-|---|---|---|---|
-| `vite` | ^5.3.0 | Build tool + HMR dev server | Manual chunk splitting configured |
-| `@vitejs/plugin-react` | ^4.3.0 | Babel-based React JSX transform | Required for Fast Refresh |
-| `tailwindcss` | ^3.4.19 | Utility-first CSS | Theme driven by CSS variables in `index.css`; `data-theme` / `data-density` attrs on `<html>` |
-| `postcss` | ^8.5.15 | CSS processing pipeline | Required by Tailwind |
-| `autoprefixer` | ^10.5.0 | Vendor prefix injection | PostCSS plugin |
+Source: `frontend/package.json`
 
 ## Router / HTTP / State Wiring
 
-- **Router:** React Router `BrowserRouter` wraps the tree in `main.jsx:16`; `Routes` + `Route` defined in `App.jsx`. `NavLink` in `Layout.jsx` for sidebar; `useNavigate` for programmatic navigation.
-- **HTTP:** Native `fetch` via `lib/api.js:request()`. No interceptor library. Auth token injected per-call from `sessionStorage`. 401 handling is inline in `request()`.
-- **State:** Zustand `create()` in `lib/store.js`. Pages subscribe via `useStore(selector)` — fine-grained selectors in `store.js:187-201` keep re-renders minimal.
-- **WebSocket:** `lib/api.js:connectWebSocket()` opens `ws(s)://<host>/api/ws`, auto-reconnects after 5 s on close, sends a keepalive `ping` every 30 s.
+- **Routing**: React Router v6 `<BrowserRouter>` wraps the whole app. All route definitions are in `App.jsx`. No nested routers.
+- **HTTP**: Native `fetch` via the `request()` wrapper in `frontend/src/lib/api.js`. No Axios or SWR. Responses are parsed as JSON; 401s with a token trigger a forced redirect.
+- **State**: Zustand store bootstrapped once at app start; contexts provide ambient UI preferences. No Redux, no React Query.
+- **Dev proxy**: Vite proxies `/api` → `http://localhost:8000` so the SPA and API share the same origin in development. `frontend/vite.config.js:8-10`
 
 ## Module Federation
 
-N/A — no Module Federation. No `@module-federation/*`, `@originjs/vite-plugin-federation`, or `ModuleFederationPlugin` in `package.json` or `vite.config.js`.
+N/A — no Module Federation. The app is a single monolithic SPA. No `@module-federation/*`, `@originjs/vite-plugin-federation`, or Webpack `ModuleFederationPlugin` detected. `frontend/package.json`
 
 ## Markdown / Mermaid Rendering
 
-N/A — no content Markdown pipeline. No `react-markdown`, `remark-*`, `rehype-*`, or `mermaid` in `package.json`. (The app is a trading dashboard; it renders data tables and charts, not authored content.)
+N/A — no content Markdown pipeline. No `react-markdown`, `remark-*`, `rehype-*`, or `mermaid` runtime dependency detected. Educational content in `Learn` and `FieldGuide` is authored as plain JS data objects (`frontend/src/lib/learnContent.js`, `learnGlossary.js`, `learnTopics.js`).
 
-## Dev Ports / Proxy
+## Dev Ports & Proxy
 
-| Concern | Value | Source |
+| Service | Port | Notes |
 |---|---|---|
-| Frontend dev server | `http://localhost:3000` | `frontend/vite.config.js:8` |
-| API proxy (dev) | `/api` → `http://localhost:8000` | `frontend/vite.config.js:9` |
-| Backend (FastAPI) | `http://localhost:8000` | `.env`, `render.yaml` |
+| Vite dev server | 3000 | `npm run dev` in `frontend/` |
+| FastAPI backend | 8000 | `uvicorn app.main:app --reload` |
+| API proxy | `/api` on 3000 → `http://localhost:8000` | `frontend/vite.config.js:8-10` |
 
 ## Testing / Lint Tooling
 
-No testing framework detected (`package.json` has no Vitest, Jest, Testing Library, Cypress, or Playwright). No ESLint config file observed in `frontend/` (no `.eslintrc.*`, `eslint.config.*`). No Prettier config. Code quality tooling is absent — ⚠️ UNVERIFIED that no tooling exists in parent workspace.
+No test framework, no ESLint, no Prettier detected in `package.json` devDependencies. The project has no automated frontend test suite (mirrors the backend — see `CLAUDE.md`).

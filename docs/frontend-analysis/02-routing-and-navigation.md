@@ -1,82 +1,74 @@
-# Routing and Navigation
-
-> Project: lodestar
-> Type: react-app
-> Skill: react-frontend-analysis
+# 02 — Routing & Navigation
 
 ## Bootstrap Sequence
 
-1. Browser loads `frontend/index.html`. An inline `<script>` reads `quant_theme_v1` and `quant_density_v1` from `localStorage` and sets `data-theme` / `data-density` on `<html>` before paint — prevents flash of wrong theme (`frontend/index.html:9-21`).
-2. Vite executes `src/main.jsx`.
-3. If `sessionStorage.getItem('quant_token')` is truthy, `initStoreWS()` is called immediately — boots the global Zustand store and opens the WebSocket before any React tree renders (`main.jsx:14`).
-4. Four context providers mount in order: `ThemeProvider` → `DensityProvider` → `MarketProvider` → `SymbolProvider`. Each reads its own `localStorage` key for initial state.
-5. `BrowserRouter` + `App` render. React Router matches the current URL.
-6. If the route is `/login`, the `Login` page renders (eager import — no lazy boundary).
-7. All other routes go through `Layout`, which re-checks auth and calls `initStoreWS()` again if needed (idempotent via `bootstrapped` flag in `store.js:144`).
-8. Private routes are individually wrapped in `<Private>` which delegates to `RequireAuth`. Anonymous users hitting a private route are redirected to `/login?from=<current-path>`.
-9. All non-Login pages are lazy-loaded via `React.lazy` with a `<Suspense>` fallback (`RouteFallback` skeleton).
+1. `main.jsx` creates `ReactDOM.createRoot` and wraps `<App>` in `<BrowserRouter>` plus four context providers (ThemeProvider → DensityProvider → MarketProvider → SymbolProvider). `frontend/src/main.jsx:16-28`
+2. If `sessionStorage.quant_token` is present, `initStoreWS()` is called before `render()`, opening the WebSocket and kicking off parallel REST fetches. `frontend/src/main.jsx:14`
+3. `App.jsx` defines all routes via React Router v6 `<Routes>`. `Login` is the only eagerly-imported page; all others are `React.lazy()`. `frontend/src/App.jsx:7,10-44`
+4. Every lazy page is wrapped in `<Suspense>` (via `<S>`) with a shimmer skeleton fallback. `frontend/src/App.jsx:59-61`
+5. Private pages are individually wrapped in `<Private>` (which calls `<RequireAuth>`). The public `<Layout>` shell renders for all routes; only the `<Outlet>` content is gated. `frontend/src/App.jsx:63-65,89`
 
-## Auth Gating Rule
+## Auth-Gating Rule
 
-`RequireAuth` (`App.jsx:48-57`) checks `sessionStorage.getItem('quant_token')` synchronously on every render. If absent, it issues `<Navigate to="/login?from=<encoded-current-path>" replace />`. The `from` param lets Login redirect back to the intended destination after successful sign-in, with an open-redirect guard (`Login.jsx:22`: path must start with `/` and not `//`).
+`RequireAuth` reads `sessionStorage.quant_token` synchronously. If absent, it redirects to `/login?from=<current path>`. The Layout shell (sidebar, top bar, status bar) is **always** rendered — only the `<Outlet>` for private routes is replaced with a redirect. `frontend/src/App.jsx:48-57`
 
 ## Route Map
 
 | Route | Component | Access | Guard | Params | Data source | Loading strategy | Purpose |
 |---|---|---|---|---|---|---|---|
-| `/login` | `Login` | Public | — | — | none | eager | Username/password login form |
-| `/` | `Market` | Public | — | — | REST via page | lazy + Suspense | Market overview (index/landing) |
-| `/learn` | `Learn` | Public | — | — | static content (`lib/learnTopics.js`) | lazy + Suspense | Educational content hub |
-| `/coach` | `Coach` | Public | — | — | REST via page | lazy + Suspense | Guided trade walkthrough |
-| `/market` | `Market` | Public | — | — | REST via page | lazy + Suspense | Market overview (explicit path) |
-| `/market/region/:id` | `Market` | Public | — | `id` — region code | REST via page | lazy + Suspense | Regional market view |
-| `/stocks` | `Stocks` | Public | — | — | REST + SymbolContext | lazy + Suspense | Per-symbol research hub (tabbed) |
-| `/screener` | `Screener` | Public | — | — | REST via page | lazy + Suspense | Stock screener with filters |
-| `/scanner` | `SentimentScanner` | Public | — | — | REST via page | lazy + Suspense | Sentiment-ranked stock universe |
-| `/heatmap` | `Heatmap` | Public | — | — | REST via page | lazy + Suspense | Sector/market heatmap |
-| `/movers` | `Movers` | Public | — | — | REST via page | lazy + Suspense | Top gainers and losers |
-| `/tape` | `Tape` | Public | — | — | REST + WS (live trades) | lazy + Suspense | Time & sales tape |
-| `/tape/:symbol` | `Tape` | Public | — | `symbol` | REST + WS | lazy + Suspense | Symbol-scoped tape |
-| `/crypto` | `Crypto` | Public | — | — | REST via page | lazy + Suspense | Crypto snapshot + bars |
-| `/analysis` | `Analysis` | Public | — | — | REST + SymbolContext | lazy + Suspense | Holistic stock analysis |
-| `/analysis/:symbol` | `Analysis` | Public | — | `symbol` | REST | lazy + Suspense | Symbol-pinned analysis |
-| `/fundamentals` | `Fundamentals` | Public | — | — | REST + SymbolContext | lazy + Suspense | Fundamentals browser |
-| `/fundamentals/:symbol` | `Fundamentals` | Public | — | `symbol` | REST | lazy + Suspense | Symbol-pinned fundamentals |
-| `/options` | `Options` | Public | — | — | REST + SymbolContext | lazy + Suspense | Options chain browser |
-| `/options/:symbol` | `Options` | Public | — | `symbol` | REST | lazy + Suspense | Symbol-pinned options |
-| `/earnings` | `Earnings` | Public | — | — | REST via page | lazy + Suspense | Earnings calendar |
-| `/dividends` | `Dividends` | Public | — | — | REST + SymbolContext | lazy + Suspense | Dividend history |
-| `/dividends/:symbol` | `Dividends` | Public | — | `symbol` | REST | lazy + Suspense | Symbol-pinned dividends |
-| `/insiders` | `Insiders` | Public | — | — | REST + SymbolContext | lazy + Suspense | Insider transactions |
-| `/insiders/:symbol` | `Insiders` | Public | — | `symbol` | REST | lazy + Suspense | Symbol-pinned insiders |
-| `/compare` | `Compare` | Public | — | — | REST + SymbolContext | lazy + Suspense | Multi-symbol chart comparison |
-| `/workspace` | `Workspace` | Private | RequireAuth | — | Zustand store | lazy + Suspense | Personal trading dashboard |
-| `/dashboard` | — | Private | RequireAuth | — | — | redirect | Alias → `/workspace` |
-| `/trade` | `Trade` | Private | RequireAuth | — | REST via page | lazy + Suspense | Quick order entry |
-| `/paper` | `Paper` | Private | RequireAuth | — | REST via page | lazy + Suspense | Paper trading simulator |
-| `/orders` | `Orders` | Private | RequireAuth | — | Zustand `orders` | lazy + Suspense | Order history and management |
-| `/positions` | `Positions` | Private | RequireAuth | — | Zustand `positions` | lazy + Suspense | Open positions |
-| `/watchlists` | `Watchlists` | Private | RequireAuth | — | REST via page | lazy + Suspense | User watchlists |
-| `/strategies` | `Strategies` | Private | RequireAuth | — | Zustand `strategies` | lazy + Suspense | Strategy CRUD and status |
-| `/backtests` | `Backtests` | Private | RequireAuth | — | Zustand `backtests` | lazy + Suspense | Backtest run list |
-| `/backtests/:id` | `BacktestDetail` | Private | RequireAuth | `id` — backtest UUID | REST | lazy + Suspense | Single backtest results |
-| `/backtest-compare` | `BacktestCompare` | Private | RequireAuth | — | REST via page | lazy + Suspense | Side-by-side backtest comparison |
-| `/optimizer` | `Optimizer` | Private | RequireAuth | — | REST via page | lazy + Suspense | Strategy parameter optimizer |
-| `/optimizer/:id` | `OptimizerDetail` | Private | RequireAuth | `id` | REST | lazy + Suspense | Optimizer run results |
-| `/risk` | `RiskAnalytics` | Private | RequireAuth | — | REST via page | lazy + Suspense | Portfolio risk metrics |
-| `/alerts` | `Alerts` | Private | RequireAuth | — | Zustand `alerts` | lazy + Suspense | System alert list |
-| `/price-alerts` | `PriceAlerts` | Private | RequireAuth | — | REST via page | lazy + Suspense | User price alert management |
-| `/audit` | `AuditLog` | Private | RequireAuth | — | REST via page | lazy + Suspense | System audit trail |
-| `/settings` | `Settings` | Private | RequireAuth | — | REST + Zustand | lazy + Suspense | Platform settings (trading toggles) |
-| `/users` | `Users` | Private | RequireAuth | — | REST via page | lazy + Suspense | Admin user management |
-| `/*` | — | Public | — | — | — | redirect | Catch-all → `/` |
+| `/login` | `Login` | Public | — | `?from` | — | Eager | JWT login form |
+| `/` | `Market` | Public | — | — | REST polling | Lazy/useEffect | Market overview (default landing) |
+| `/market` | `Market` | Public | — | — | REST polling | Lazy/useEffect | Market overview alias |
+| `/market/region/:id` | `Market` | Public | — | `:id` (region) | REST polling | Lazy/useEffect | Region-filtered market view |
+| `/learn` | `Learn` | Public | — | — | Static (learnContent.js) | Lazy/static | Educational content library |
+| `/coach` | `Coach` | Public | — | — | Static + REST | Lazy/useEffect | Guided trade coaching |
+| `/stocks` | `Stocks` | Public | — | — | REST | Lazy/useEffect | Stock browser with tabbed research |
+| `/screener` | `Screener` | Public | — | — | REST | Lazy/useEffect | Filterable stock screener |
+| `/scanner` | `SentimentScanner` | Public | — | — | REST | Lazy/useEffect | Sentiment-ranked stock scanner |
+| `/heatmap` | `Heatmap` | Public | — | — | REST | Lazy/useEffect | Sector/market heatmap |
+| `/movers` | `Movers` | Public | — | — | REST | Lazy/useEffect | Top gainers, losers, most active |
+| `/tape` | `Tape` | Public | — | — | REST | Lazy/useEffect | Time & sales (tick data) |
+| `/tape/:symbol` | `Tape` | Public | — | `:symbol` | REST | Lazy/useEffect | Symbol-specific tape |
+| `/crypto` | `Crypto` | Public | — | — | REST | Lazy/useEffect | Cryptocurrency prices & charts |
+| `/analysis` | `Analysis` | Public | — | — | REST | Lazy/useEffect | Technical chart + indicators |
+| `/analysis/:symbol` | `Analysis` | Public | — | `:symbol` | REST | Lazy/useEffect | Symbol-specific technical analysis |
+| `/fundamentals` | `Fundamentals` | Public | — | — | REST | Lazy/useEffect | Company financials |
+| `/fundamentals/:symbol` | `Fundamentals` | Public | — | `:symbol` | REST | Lazy/useEffect | Symbol-specific fundamentals |
+| `/options` | `Options` | Public | — | — | REST | Lazy/useEffect | Options chain viewer |
+| `/options/:symbol` | `Options` | Public | — | `:symbol` | REST | Lazy/useEffect | Symbol-specific options chain |
+| `/earnings` | `Earnings` | Public | — | — | REST | Lazy/useEffect | Earnings calendar |
+| `/dividends` | `Dividends` | Public | — | — | REST | Lazy/useEffect | Dividend history |
+| `/dividends/:symbol` | `Dividends` | Public | — | `:symbol` | REST | Lazy/useEffect | Symbol-specific dividends |
+| `/insiders` | `Insiders` | Public | — | — | REST | Lazy/useEffect | Insider trading activity |
+| `/insiders/:symbol` | `Insiders` | Public | — | `:symbol` | REST | Lazy/useEffect | Symbol-specific insider data |
+| `/compare` | `Compare` | Public | — | — | REST | Lazy/useEffect | Multi-symbol comparison |
+| `/workspace` | `Workspace` | Private | RequireAuth | — | Store + REST | Lazy/store | Main trading dashboard |
+| `/dashboard` | Redirect → `/workspace` | Private | — | — | — | — | Legacy alias |
+| `/trade` | `Trade` | Private | RequireAuth | — | Store + REST | Lazy/store | Live order placement |
+| `/paper` | `Paper` | Private | RequireAuth | — | Store + REST | Lazy/store | Paper trading interface |
+| `/orders` | `Orders` | Private | RequireAuth | — | Store | Lazy/store | Historical order list |
+| `/positions` | `Positions` | Private | RequireAuth | — | Store | Lazy/store | Open positions with P&L |
+| `/watchlists` | `Watchlists` | Private | RequireAuth | — | REST | Lazy/useEffect | Watchlist management |
+| `/strategies` | `Strategies` | Private | RequireAuth | — | Store | Lazy/store | Strategy CRUD + control |
+| `/backtests` | `Backtests` | Private | RequireAuth | — | Store | Lazy/store | Backtest results list |
+| `/backtests/:id` | `BacktestDetail` | Private | RequireAuth | `:id` (UUID) | REST | Lazy/useEffect | Detailed backtest stats & trades |
+| `/backtest-compare` | `BacktestCompare` | Private | RequireAuth | — | REST | Lazy/useEffect | Side-by-side backtest comparison |
+| `/optimizer` | `Optimizer` | Private | RequireAuth | — | REST | Lazy/useEffect | Parameter optimization runs |
+| `/optimizer/:id` | `OptimizerDetail` | Private | RequireAuth | `:id` (UUID) | REST | Lazy/useEffect | Optimizer run detail |
+| `/risk` | `RiskAnalytics` | Private | RequireAuth | — | REST | Lazy/useEffect | Portfolio risk metrics (VaR, beta) |
+| `/alerts` | `Alerts` | Private | RequireAuth | — | Store | Lazy/store | System alert inbox |
+| `/price-alerts` | `PriceAlerts` | Private | RequireAuth | — | REST | Lazy/useEffect | Price-triggered alert management |
+| `/audit` | `AuditLog` | Private | RequireAuth | — | REST | Lazy/useEffect | Audit trail of all actions |
+| `/settings` | `Settings` | Private | RequireAuth | — | Store + REST | Lazy/store | Kill switch, live/paper toggle |
+| `/users` | `Users` | Private | RequireAuth | — | REST | Lazy/useEffect | Admin: user management |
+| `/*` | Redirect → `/` | — | — | — | — | — | 404 fallback |
 
 ## Deep-Link / Param Handling
 
-Pages that accept a `:symbol` URL param use the `useSymbolPage(routeSym)` helper (`lib/SymbolContext.jsx:84-94`). On mount, if the URL param is present it calls `setSymbol()` to update the global SymbolContext (overriding whatever was active), then the page reads `symbol` from context for all API calls. This means a direct URL like `/analysis/TSLA` will navigate the whole app to TSLA, not just that page.
-
-The `:id` params on `/backtests/:id` and `/optimizer/:id` are UUIDs used directly in REST calls; no context propagation.
+Routes with a `:symbol` param (e.g. `/analysis/AAPL`, `/tape/TSLA`) use `useSymbolPage(routeSym)` from `SymbolContext` (`frontend/src/lib/SymbolContext.jsx`). This helper syncs the URL param with the global active symbol and recents list, so navigating directly to `/fundamentals/MSFT` sets MSFT as the active symbol application-wide.
 
 ## External Entry Points
 
-Any URL under the app (e.g. `/workspace`, `/analysis/AAPL`) can be bookmarked and deep-linked directly — the SPA catch-all handles unknown paths on first load. The server must serve `index.html` for all non-asset paths for this to work in production.
+- Direct deep links to any public route work without authentication.
+- Private routes redirect to `/login?from=<path>` and return after successful auth.
+- The SPA has no hash-based routing; all URLs require the server to serve `index.html` for non-`/api` paths (handled by FastAPI's static mount with SPA fallback).

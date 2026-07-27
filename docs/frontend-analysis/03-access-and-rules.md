@@ -1,43 +1,36 @@
-# Access and Rules
+# 03 — Access & Rules
 
-> Project: lodestar
-> Type: react-app
-> Skill: react-frontend-analysis
+## Access & Rules
 
-## Auth / AuthZ Scheme
-
-Authentication is a JWT Bearer-token flow. The user posts credentials to `/api/auth/login` (form-encoded); the backend returns an `access_token`. The token is stored in **`sessionStorage`** under key `quant_token` (tab-scoped — not shared across tabs, not persisted across browser restarts). Every subsequent API request includes `Authorization: Bearer <token>` (`lib/api.js:17-18`).
-
-There is no role-based authorization in the frontend. The backend enforces admin-only endpoints; the frontend exposes the Users admin page at `/users` but does not check role before rendering it — access control for that page is backend-enforced.
-
-## Access Rules
-
-| Rule | Behavior | Enforced where (file) | Scope (route/feature) |
+| Rule | Behavior | Enforced where (file) | Scope |
 |---|---|---|---|
-| Public market data | All market/research/screener/education routes accessible without token | `App.jsx` route tree (no `Private` wrapper) | All public routes |
-| Private trading routes | Render `<Navigate to="/login?from=...">` if no token in sessionStorage | `App.jsx:RequireAuth` (line 48-57) | `/workspace`, `/trade`, `/paper`, `/orders`, `/positions`, `/watchlists`, `/strategies`, `/backtests*`, `/optimizer*`, `/risk`, `/alerts`, `/price-alerts`, `/audit`, `/settings`, `/users` |
-| Session expiry (401 with token) | Clear token + hard redirect to `/login?from=<current>` | `lib/api.js:28-35` | All authenticated REST calls |
-| Anonymous 401 | Throw `unauthorized` error; page handles it | `lib/api.js:36` | REST calls made without a token that hit a protected endpoint |
-| Open-redirect protection | `from` param honored only if it starts with `/` and not `//` | `pages/Login.jsx:22` | Post-login redirect |
-| WebSocket gating | `initStoreWS()` called only when `quant_token` is present | `main.jsx:14`, `components/Layout.jsx:117` | WebSocket connection |
-| Market scope | Account and position API calls include `?market=<market>` derived from `quant_market_v1` in localStorage | `lib/store.js:18-19`, `lib/api.js:mkt()` | `/account`, `/positions`, watchlists |
-| Live trading safety gate | Requires both `ALPACA_BASE_URL` = live URL **and** `ALPACA_LIVE_CONFIRMED=true` | `app/core/config.py` (backend — not frontend) | Alpaca order submission |
-| Trading halted banner | `Layout` renders a warning banner when `control.is_live && !control.trading_enabled` | `components/Layout.jsx:352-357` | Layout chrome (all authenticated views) |
+| JWT presence check | Reads `sessionStorage.quant_token`; if absent, redirects to `/login?from=<current path>` | `frontend/src/App.jsx:48-57` (`RequireAuth`) | All private routes |
+| Session expiry mid-use | On any REST 401 response with an existing token: clears token, redirects to `/login?from=<current path>` | `frontend/src/lib/api.js:27-36` | All REST calls |
+| Anonymous 401 passthrough | If a public route hits a 401 (no token), throws `unauthorized` error without redirect — page decides how to surface it | `frontend/src/lib/api.js:31-36` | Public routes calling private endpoints |
+| WS guard | `initStoreWS()` only called if token is present at boot; WS never opens for unauthenticated users | `frontend/src/main.jsx:14` | WebSocket |
+| Admin-only pages | `/users` route uses `RequireAuth` only (token required); admin role enforcement is server-side — the frontend does not gate on role | `frontend/src/App.jsx:140` | `/users` |
+| Live vs. paper trading gate | `control.is_live` flag from `/api/control/state` drives UI labels ("LIVE" vs. "PAPER"); kill switch and live-mode toggle require authenticated requests | `frontend/src/lib/store.js:36-38` | Settings, Workspace |
+| Kill switch display | `control.kill_switch_active` reflected in Settings page + sidebar status block | `frontend/src/lib/store.js:34` | Sidebar, Settings |
+| Strategies enabled flag | `control.strategies_enabled` gates the "Run Strategies" UI affordance | `frontend/src/lib/store.js:34` | Sidebar status, Settings |
 
-## Scoping / Multi-Tenancy
+## Auth & Authorization Scheme
 
-The app supports two market scopes: **US** and **India (NSE)**. The active market is stored in `localStorage` as `quant_market_v1` and read by `MarketContext`, `lib/api.js:mkt()`, and `lib/store.js:currentMarket()`. Switching market fires a `market:change` custom event that triggers the store to re-fetch account and positions for the new scope (`store.js:173-177`). MarketContext syncs across tabs via the `storage` event.
+Authentication is **JWT bearer token**. The token is obtained via `POST /api/auth/login` (OAuth2 password flow, `application/x-www-form-urlencoded`) and stored in `sessionStorage.quant_token` — tab-scoped, cleared on tab close. `frontend/src/lib/api.js:48-53`
+
+Authorization is enforced **server-side only**. The frontend has no role-checking logic beyond `RequireAuth` (token present or not). Admin endpoints (e.g. `/api/users`) return 403 from FastAPI if the caller is not role `admin`; the frontend surfaces this as an error state.
+
+## Scoping / Multi-Tenant
+
+The app is **single-tenant** (one account per deployment). The **market** selector (`us` / `in`) scopes account, positions, and watchlist data. The selected market is persisted in `localStorage.quant_market_v1` and read by both `MarketContext` and the Zustand store loaders. `frontend/src/lib/MarketContext.jsx`, `frontend/src/lib/store.js:18-19`
 
 ## Validation Approach
 
-- **Login form:** HTML native `required` attribute on username and password inputs (`pages/Login.jsx:62,70`). No additional client-side validation.
-- **No form validation library** detected (`package.json` has no Zod, Yup, react-hook-form, etc.).
-- API validation errors from the backend are surfaced via `err.detail.reason`, `err.detail.detail`, or `err.message` extracted in `lib/api.js:39-41` and passed to callers, who may show them in toasts.
+There is no form validation library. Validation is plain React state + `onChange` handlers. Required fields are checked before submission; errors are surfaced via Sonner toasts from `api.apiError()`. `frontend/src/lib/toast.js`
 
 ## Feature Flags
 
-N/A — no client-side feature-flag system (no LaunchDarkly, Unleash, or similar). Runtime behavior is controlled by backend environment variables (`TRADING_ENABLED`, `STRATEGIES_ENABLED`) that are reflected in the `control` Zustand slice returned from `/api/control/state`.
+N/A — no feature-flag system. Live trading is controlled by a runtime server-side flag (`settings.is_live_trading` in FastAPI config, reflected via `/api/control/state`), not a frontend flag.
 
-## Real-Time Invalidation Rules
+## Real-Time Invalidation
 
-Real-time state invalidation is driven by the WebSocket. See `07-state-and-data-fetching.md` for the full event → state mapping.
+Session expiry during a live WS session: the WS stays open, but the next REST call from the 30 s safety refresh (or a WS-triggered invalidation) will hit 401 and force re-login. See `07-state-and-data-fetching.md` for the full real-time event table.

@@ -1,50 +1,45 @@
-# State and Data Fetching
-
-> Project: lodestar
-> Type: react-app
-> Skill: react-frontend-analysis
+# 07 — State & Data Fetching
 
 ## Fetching Library / Pattern
 
-No React data-fetching library (no React Query, SWR, Apollo, etc.). All fetching is done via a hand-rolled `fetch` wrapper in `lib/api.js:request()`. The wrapper:
+No dedicated fetching library (no React Query, SWR, or Apollo). Data fetching uses two patterns:
 
-- Injects `Authorization: Bearer <token>` when a token exists
-- Handles 401 by clearing the token and redirecting to `/login`
-- Extracts error detail from JSON or text on non-ok responses
-- Returns `null` on 204 responses
+1. **Store-backed (Zustand)** — used for live trading data that must stay in sync across pages. `loadX()` actions call the REST API and write into the store. Called on boot, on WS invalidation, and on a 30 s safety interval. `frontend/src/lib/store.js`
 
-Store loaders (`loadControl`, `loadOrders`, etc.) call `api.*` methods via a **coalescing pattern** (`lib/store.js:22-29`): an in-flight `Map` keyed by a logical name prevents duplicate concurrent fetches. If a second call arrives while the first is in-flight, it receives the same `Promise` rather than issuing a new request.
+2. **Local `useEffect`** — used for page-specific data that doesn't need to be shared (market data, research, backtests detail). Each page fetches on mount (and when the active symbol or relevant param changes), holds the result in local `useState`, and shows a skeleton while loading.
 
-## Cache and Invalidation Strategy
+## Cache & Invalidation Strategy
 
-| Mechanism | How it works | Source |
+There is no client-side cache layer. Every fetch goes to the server. The Zustand store acts as a short-lived in-memory cache for the duration of the browser session.
+
+| Layer | Mechanism | TTL |
 |---|---|---|
-| WS-driven invalidation | WS message received → specific `loadXxx()` called → REST re-fetch → store updated | `store.js:99-137` |
-| 30 s safety refresh | `setInterval` backstop re-fetches all slices even if no WS event | `store.js:161-170` |
-| In-flight coalescing | Concurrent calls to the same loader share the same `Promise`; no duplicate requests | `store.js:22-29` |
-| No TTL / stale-while-revalidate | Data is considered fresh immediately after any fetch; no client-side expiry | — |
-| No localStorage caching | Store state is in-memory only; refreshing the page re-fetches everything | — |
-
-Pages that fetch data outside the store (most public market-data pages) call `api.*` directly in `useEffect` hooks with no caching layer — each mount triggers a fresh fetch.
+| Zustand store (live trading data) | WS event invalidation + 30 s safety refresh | ~30 s max stale |
+| Page-local state (research data) | Re-fetched on symbol change or page remount | N/A (no expiry) |
+| OHLCV bars | Cached server-side in `ohlcv` PostgreSQL table; not re-requested if already stored | Server-side |
 
 ## Real-Time Events
 
-All events arrive on a single WebSocket at `ws(s)://<host>/api/ws`. The client reconnects after 5 s on close (`api.js:189-191`) and sends a keepalive `ping` every 30 s (`api.js:193-196`).
+WebSocket URL: `ws[s]://<host>/api/ws`. Auto-reconnects after 5 s on close. Keepalive ping every 30 s. Source: `frontend/src/lib/api.js:182-198`, `frontend/src/lib/store.js:99-137`.
 
 | Channel | Event / message type | Effect on state | Source |
 |---|---|---|---|
-| `/api/ws` | `order_update` | `loadOrders()`, `loadPositions()`, `loadAccount()` re-fetched | `store.js:101-106` |
-| `/api/ws` | `position_closed` | `loadPositions()`, `loadAccount()` re-fetched | `store.js:107-110` |
-| `/api/ws` | `alert` | `loadAlerts()` re-fetched | `store.js:111-113` |
-| `/api/ws` | `price_alert_triggered` | `loadAlerts()` re-fetched | `store.js:111-113` |
-| `/api/ws` | `control_update` | `loadControl()` re-fetched | `store.js:114-116` |
-| `/api/ws` | `strategy_update` | `loadStrategies()` re-fetched | `store.js:117-120` |
-| `/api/ws` | `strategy_signal` | `loadStrategies()` re-fetched | `store.js:117-120` |
-| `/api/ws` | `backtest_completed` | `loadBacktests()` re-fetched + `toast.success` shown with `return_pct` and `trades` | `store.js:121-128` |
-| `/api/ws` | `trade` | No store update — handled directly by `Tape` page and `Workspace` ticker via their own WS listener ⚠️ UNVERIFIED | `store.js:130-132` |
+| `/api/ws` | `order_update` | Triggers `loadOrders()`, `loadPositions()`, `loadAccount()` | `frontend/src/lib/store.js:102-106` |
+| `/api/ws` | `position_closed` | Triggers `loadPositions()`, `loadAccount()` | `frontend/src/lib/store.js:107-110` |
+| `/api/ws` | `alert` | Triggers `loadAlerts()` (recomputes `unackCount`) | `frontend/src/lib/store.js:111-113` |
+| `/api/ws` | `price_alert_triggered` | Triggers `loadAlerts()` | `frontend/src/lib/store.js:112-113` |
+| `/api/ws` | `control_update` | Triggers `loadControl()` | `frontend/src/lib/store.js:114-116` |
+| `/api/ws` | `strategy_update` | Triggers `loadStrategies()` | `frontend/src/lib/store.js:117-120` |
+| `/api/ws` | `strategy_signal` | Triggers `loadStrategies()` | `frontend/src/lib/store.js:117-120` |
+| `/api/ws` | `backtest_completed` | Triggers `loadBacktests()`, shows success toast with return % | `frontend/src/lib/store.js:121-129` |
+| `/api/ws` | `trade` | No store mutation — handled directly by Workspace/Tape page | `frontend/src/lib/store.js:130-132` |
 
-The `market:change` custom DOM event (`MarketContext.jsx:47`) also drives partial re-fetches: the store listens for `window.dispatchEvent(new CustomEvent('market:change'))` and calls `loadAccount()` + `loadPositions()` for the new market scope (`store.js:173-177`).
+The WS message router writes `wsLastMessage` on every message regardless of type, which `StatusBar` uses to display the "last update" timestamp. `frontend/src/lib/store.js:100`
 
 ## Optimistic Updates
 
-N/A — no optimistic update behavior. All mutations wait for server confirmation, then the WS event triggers the re-fetch that updates the UI.
+None. All mutations wait for the server response before state changes. See `06-runtime-flows.md` for the mutation flow.
+
+## Polling
+
+`WatchRail` polls watchlist quotes every 10 s via `setInterval` → `api.getWatchlistQuotes()`. This is the only active polling loop; all other live data comes via WS events or the 30 s safety refresh in `initStoreWS`. `frontend/src/components/WatchRail.jsx`

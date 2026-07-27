@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -243,8 +244,7 @@ async def export_orders_csv(
     days: int = Query(default=30),
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_current_user),
-) -> "Response":
-    from fastapi.responses import Response
+) -> Response:
     from app.core.models import Order
     import csv
     import io
@@ -280,8 +280,7 @@ async def export_backtest_csv(
     backtest_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_current_user),
-) -> "Response":
-    from fastapi.responses import Response
+) -> Response:
     from app.core.models import BacktestTrade
     import csv
     import io

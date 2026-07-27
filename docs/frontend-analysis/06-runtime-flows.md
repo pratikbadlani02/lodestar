@@ -1,127 +1,108 @@
-# Runtime Flows
-
-> Project: lodestar
-> Type: react-app
-> Skill: react-frontend-analysis
+# 06 — Runtime Flows
 
 ## Page Lifecycle
 
-**Authenticated user navigating to a private page (e.g. `/workspace`):**
+Most pages follow this pattern on mount:
 
-1. User loads app or clicks a nav link.
-2. React Router evaluates the route; the `Private` wrapper renders `RequireAuth`.
-3. `RequireAuth` reads `sessionStorage.quant_token` — token present, so it renders children.
-4. `Layout` has already booted (it checks auth on every navigation and calls `initStoreWS()` — idempotent via `bootstrapped` flag).
-5. `initStoreWS()` fires six parallel REST fetches (`loadControl`, `loadHealth`, `loadAccount`, `loadPositions`, `loadOrders`, `loadAlerts`) and opens the WebSocket.
-6. The page chunk (`Workspace.jsx`) is lazy-loaded; `<Suspense>` shows `RouteFallback` (skeleton rows) until the chunk and its initial data are ready.
-7. The page component mounts and calls `useStore(selectXxx)` for the slices it needs. Zustand notifies only the subscribers of those specific selectors.
-8. The WebSocket starts delivering server events; each event type calls the relevant `loadXxx()` loader, which re-fetches from REST and updates the store. The page re-renders with fresh data.
-9. A 30 s `setInterval` backstop re-fetches all slices even if no WS event arrives (`store.js:161-170`).
+1. On first render, call one or more `useStore.getState().loadX()` actions (for store-backed data) or local `useEffect` fetches (for page-specific REST calls).
+2. The loader is idempotent — concurrent calls coalesce via an in-flight map; if the data is already fetching, the new call joins the existing promise. `frontend/src/lib/store.js:23-30`
+3. The page renders a skeleton (`<SkeletonRows>`) while data loads, then the populated view.
+4. For public research pages (Analysis, Fundamentals, Options, etc.) the active symbol comes from `SymbolContext` — when the user changes the symbol, the page re-fetches.
+5. Private pages (Workspace, Trade, Strategies) subscribe to Zustand slices. WS events invalidate the relevant slice, triggering a REST refetch and a re-render.
 
-**Anonymous user navigating to a public page (e.g. `/stocks`):**
+Mutations (order submit, strategy create, backtest trigger) are fire-and-forget REST calls: the page `await`s the response, shows a toast on success or error, and then either relies on the next WS event to refresh state or calls the loader directly.
 
-1. No token in sessionStorage — `initStoreWS()` is **not** called.
-2. Layout renders with `authed = false`; auth-only sidebar items show a lock icon; `WatchRail` and `OrderSlideOver` are hidden.
-3. The page mounts and fetches directly from REST (no Zustand store involvement for public market data).
+## Diagrams
 
-## Happy-Path Sequence: Authenticated Session
+### Happy-Path Sequence: Submit an Order
 
 ```mermaid
 sequenceDiagram
-    participant Browser
-    participant main.jsx
-    participant Layout
-    participant Store as Zustand Store
-    participant API as FastAPI /api
-    participant WS as WebSocket /api/ws
+    participant User
+    participant OrderSlideOver
+    participant api.js
+    participant FastAPI
+    participant Zustand
 
-    Browser->>main.jsx: load app (quant_token in sessionStorage)
-    main.jsx->>Store: initStoreWS()
-    Store->>API: GET /control/state, /health, /account, /positions, /orders, /alerts (parallel)
-    API-->>Store: responses → update slices
-    Store->>WS: connectWebSocket()
-    WS-->>Store: ws open
-
-    Browser->>Layout: navigate to /workspace
-    Layout->>Store: useStore(selectXxx) — subscribe to slices
-    Store-->>Layout: current state
-    Layout-->>Browser: render page with data
-
-    WS-->>Store: { type: "order_update" }
-    Store->>API: GET /orders, /positions, /account (re-fetch)
-    API-->>Store: updated data
-    Store-->>Layout: notify subscribers
-    Layout-->>Browser: re-render with fresh data
+    User->>OrderSlideOver: Fill symbol/qty/side, click Submit
+    OrderSlideOver->>api.js: api.submitOrder(orderPayload)
+    api.js->>FastAPI: POST /api/orders
+    FastAPI-->>api.js: 200 { order }
+    api.js-->>OrderSlideOver: resolves with order
+    OrderSlideOver->>OrderSlideOver: toast.success("Order submitted")
+    FastAPI-->>Zustand: WS push: order_update
+    Zustand->>api.js: loadOrders() + loadPositions() + loadAccount()
+    api.js->>FastAPI: GET /api/orders, /api/positions, /api/account
+    FastAPI-->>api.js: updated data
+    api.js-->>Zustand: set({ orders, positions, account })
+    Zustand-->>OrderSlideOver: subscribed components re-render
 ```
 
-## Error / Recovery Sequence
+### Error / Recovery Sequence: Risk-Rejected Order
 
 ```mermaid
 sequenceDiagram
-    participant Browser
-    participant Page as Page Component
-    participant EB as ErrorBoundary
-    participant API as FastAPI /api
-    participant WS as WebSocket /api/ws
+    participant User
+    participant OrderSlideOver
+    participant api.js
+    participant FastAPI
 
-    Browser->>Page: render page chunk
-    Page->>API: fetch data (REST)
-    API-->>Page: HTTP 401 (session expired, token was set)
-    Page->>Browser: api.js clears token, hard-redirects to /login?from=/workspace
-
-    Browser->>Page: (new session) render page
-    Page->>Page: throw render error (JS exception)
-    Page->>EB: componentDidCatch(err, info)
-    EB->>Browser: render "Something broke" card (retry + home buttons)
-    Browser->>EB: user clicks Retry
-    EB->>EB: setState({ err: null }) → re-render children
-    EB->>Page: page re-mounts
-
-    WS-->>WS: connection closed
-    WS->>WS: setTimeout 5s → connectWebSocket() (auto-reconnect)
-    WS-->>Store: ws open → _setWs(true)
+    User->>OrderSlideOver: Submit order (exceeds position size limit)
+    OrderSlideOver->>api.js: api.submitOrder(orderPayload)
+    api.js->>FastAPI: POST /api/orders
+    FastAPI-->>api.js: 422 { detail: { reason: "Position size exceeds 5% limit" } }
+    api.js->>api.js: extract detail.reason, throw Error
+    api.js-->>OrderSlideOver: throws
+    OrderSlideOver->>OrderSlideOver: toast.error("Position size exceeds 5% limit")
+    Note over OrderSlideOver: Form stays open; user can adjust and retry
 ```
 
-## Main End-to-End Data Flow
+### Main End-to-End Data Flow
 
 ```mermaid
-flowchart TD
-    Browser["Browser"]
-
-    subgraph frontend["Frontend (React SPA)"]
-        Ctx["Context Providers\n(Theme/Density/Market/Symbol)"]
-        Store["Zustand Store\n(global trading state)"]
-        API_JS["lib/api.js\n(fetch wrapper)"]
-        WS_JS["lib/api.js:connectWebSocket\n(WS client)"]
-        Pages["Page Components\n(40+ lazy chunks)"]
+graph TD
+    subgraph Browser
+        Context["React Contexts\n(theme, market, density, symbol)"]
+        Store["Zustand Store\n(control, orders, positions,\nalerts, strategies, backtests)"]
+        Pages["Page Components\n(27 lazy routes)"]
+        WS["WebSocket client\n/api/ws"]
     end
 
-    subgraph backend["Backend (FastAPI)"]
-        REST["REST /api/*"]
-        WSEndpoint["/api/ws"]
+    subgraph Backend
+        API["FastAPI /api/*"]
+        Scheduler["APScheduler\n(strategy ticks, alerts)"]
+        Broker["Alpaca Broker"]
         DB["PostgreSQL"]
-        Redis["Redis\n(pub/sub + cache)"]
-        Alpaca["Alpaca API"]
+        Redis["Redis\n(WS pub/sub)"]
     end
 
-    Browser -- navigate --> Pages
-    Pages -- useStore(selector) --> Store
-    Pages -- direct REST calls --> API_JS
-    Store -- loadXxx() --> API_JS
-    API_JS -- fetch /api/* --> REST
-    REST -- query/write --> DB
-    REST -- publish events --> Redis
-    Redis -- push events --> WSEndpoint
-    WSEndpoint -- JSON message --> WS_JS
-    WS_JS -- _onWsMessage(msg) --> Store
-    Store -- setState → notify selectors --> Pages
-    REST -- market/trading calls --> Alpaca
-    Alpaca -- quote/order data --> REST
-    Ctx -- setMarket() dispatches market:change --> Store
+    Pages -->|"useStore(selector)"| Store
+    Pages -->|"useContext"| Context
+    Store -->|"api.getX()"| API
+    Pages -->|"api.getX() direct"| API
+    WS -->|"JSON messages"| Store
+    API -->|"pub/sub push"| Redis
+    Redis -->|"broadcast"| WS
+    Scheduler -->|"order events"| Redis
+    API --> DB
+    API --> Broker
+```
+
+### Routing & Symbol Resolution Flow
+
+```mermaid
+flowchart LR
+    User["User navigates to /analysis/AAPL"]
+    Router["React Router\nextract :symbol = AAPL"]
+    SymbolPage["useSymbolPage('AAPL')\n(SymbolContext.jsx)"]
+    Context["SymbolContext\nsetSymbol('AAPL')\nupdate recents"]
+    Page["Analysis page\nfetch OHLCV + indicators\nfor AAPL"]
+
+    User --> Router --> SymbolPage --> Context --> Page
 ```
 
 ## Mutation Flow
 
-All mutations (place order, create strategy, run backtest, etc.) are fire-and-wait: the page calls `api.submitOrder()` (or equivalent), waits for the REST response, then the WS delivers a `order_update` / `backtest_completed` event that invalidates the relevant store slice. There is **no optimistic update** pattern — the UI does not update before server confirmation.
+All mutations are **non-optimistic**. The UI waits for the server response before updating state. State updates arrive via WS events (fast path) or the 30 s safety-refresh interval (fallback). There is no local-first write or rollback logic.
 
-The one exception is toast notifications on `backtest_completed`: the WS message includes `return_pct` and `trades`, which are shown immediately in a success toast (`store.js:124-128`) alongside the store re-fetch.
+Exception: `api.exportOrdersCsv()` and `api.exportBacktestCsv()` use `window.open()` directly rather than `fetch`, bypassing the request wrapper entirely. `frontend/src/lib/api.js:105-106`
